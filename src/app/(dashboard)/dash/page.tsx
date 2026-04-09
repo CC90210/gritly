@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+// Data fetched via /api/dash/stats
 import { useOrgStore } from "@/lib/store/org";
 import {
   DollarSign, FileText, Briefcase, AlertCircle,
@@ -157,66 +157,30 @@ export default function DashPage() {
     setLoading(true);
 
     try {
-      const supabase = createClient();
-      const orgId = org.id;
-
-      const [
-        clientsRes,
-        quotesRes,
-        jobsRes,
-        invoicesRes,
-        requestsRes,
-        paymentsRes,
-      ] = await Promise.all([
-        supabase.from("clients").select("id", { count: "exact", head: true }).eq("org_id", orgId),
-        supabase.from("quotes").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "sent"),
-        supabase.from("jobs").select("id", { count: "exact", head: true }).eq("org_id", orgId).in("status", ["scheduled", "in_progress"]),
-        supabase.from("invoices").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "overdue"),
-        supabase.from("service_requests").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "new"),
-        supabase
-          .from("payments")
-          .select("amount")
-          .eq("org_id", orgId)
-          .eq("status", "completed")
-          .gte("paid_at", new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
-      ]);
-
-      const totalClients = clientsRes.count ?? 0;
-
-      if (totalClients === 0) {
+      const res = await fetch("/api/dash/stats");
+      if (!res.ok) {
         setIsEmpty(true);
-        setLoading(false);
         return;
       }
 
-      const revenue = (paymentsRes.data ?? []).reduce(
-        (sum, p) => sum + (p.amount as number),
-        0
-      );
+      const data = await res.json();
 
-      // Upcoming jobs this week
-      const weekEnd = new Date();
-      weekEnd.setDate(weekEnd.getDate() + 7);
-      const upcomingRes = await supabase
-        .from("jobs")
-        .select("id", { count: "exact", head: true })
-        .eq("org_id", orgId)
-        .eq("status", "scheduled")
-        .lte("scheduled_start", weekEnd.toISOString());
+      if (data.totalClients === 0) {
+        setIsEmpty(true);
+        return;
+      }
 
       setStats({
-        revenue,
-        openQuotes: quotesRes.count ?? 0,
-        activeJobs: jobsRes.count ?? 0,
-        overdueInvoices: invoicesRes.count ?? 0,
-        upcomingJobs: upcomingRes.count ?? 0,
-        recentRequests: requestsRes.count ?? 0,
-        totalClients,
+        revenue: data.revenue ?? 0,
+        openQuotes: data.openQuotes ?? 0,
+        activeJobs: data.activeJobs ?? 0,
+        overdueInvoices: data.overdueInvoices ?? 0,
+        upcomingJobs: data.upcomingJobs ?? 0,
+        recentRequests: data.recentRequests ?? 0,
+        totalClients: data.totalClients ?? 0,
       });
-
       setIsEmpty(false);
     } catch {
-      // Stats failure is non-fatal — show empty state
       setIsEmpty(true);
     } finally {
       setLoading(false);

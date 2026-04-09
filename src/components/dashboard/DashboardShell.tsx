@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { signOut } from "@/lib/auth/client";
 import { useOrgStore } from "@/lib/store/org";
 import type { Organization } from "@/lib/types/database";
 import type { IndustryConfig } from "@/lib/industry/config";
@@ -165,9 +165,8 @@ export function DashboardShell({
   });
 
   async function handleSignOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
+    await signOut();
+    window.location.href = "/login";
   }
 
   const displayName =

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { createAdminSupabase } from "@/lib/supabase/server";
+import { db } from "@/lib/db";
+import { organizations, users } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 function slugify(text: string): string {
   return text
@@ -9,37 +11,10 @@ function slugify(text: string): string {
     .slice(0, 50);
 }
 
-async function uniqueSlug(
-  admin: Awaited<ReturnType<typeof createAdminSupabase>>,
-  base: string
-): Promise<string> {
-  let candidate = slugify(base);
-  let attempt = 0;
-
-  while (true) {
-    const slug = attempt === 0 ? candidate : `${candidate}-${attempt}`;
-    const { data } = await admin
-      .from("organizations")
-      .select("id")
-      .eq("slug", slug)
-      .maybeSingle();
-
-    if (!data) return slug;
-    attempt++;
-  }
-}
-
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as {
-      businessName: string;
-      firstName: string;
-      lastName: string;
-      email: string;
-      password: string;
-    };
-
-    const { businessName, firstName, lastName, email, password } = body;
+    const body = await request.json();
+    const { businessName, name, email, password } = body;
 
     if (!businessName || !email || !password) {
       return NextResponse.json(
@@ -55,55 +30,36 @@ export async function POST(request: Request) {
       );
     }
 
-    const admin = await createAdminSupabase();
-
-    // 1. Create the organization (industry defaults to hvac, updated in onboarding)
-    const slug = await uniqueSlug(admin, businessName);
-    const { data: org, error: orgError } = await admin
-      .from("organizations")
-      .insert({
-        name: businessName,
-        slug,
-        industry: "hvac", // placeholder — overwritten in onboarding step 1
-        plan: "starter",
-        onboarding_completed: false,
-      })
-      .select("id")
-      .single();
-
-    if (orgError || !org) {
+    // Check if email already exists
+    const existing = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
+    if (existing.length > 0) {
       return NextResponse.json(
-        { error: orgError?.message ?? "Failed to create organization." },
-        { status: 500 }
+        { error: "An account with this email already exists." },
+        { status: 409 }
       );
     }
 
-    // 2. Create the auth user with org_id in metadata
-    //    The handle_new_user trigger will auto-create the profile row
-    const { data: authData, error: authError } =
-      await admin.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: {
-          org_id: org.id,
-          role: "owner",
-          first_name: firstName,
-          last_name: lastName,
-          onboarding_completed: false,
-        },
-      });
-
-    if (authError || !authData.user) {
-      // Rollback org creation
-      await admin.from("organizations").delete().eq("id", org.id);
-      return NextResponse.json(
-        { error: authError?.message ?? "Failed to create user account." },
-        { status: 500 }
-      );
+    // Create the organization
+    let slug = slugify(businessName);
+    const existingSlugs = await db.select({ id: organizations.id }).from(organizations).where(eq(organizations.slug, slug)).limit(1);
+    if (existingSlugs.length > 0) {
+      slug = `${slug}-${Date.now().toString(36)}`;
     }
 
-    return NextResponse.json({ orgId: org.id }, { status: 201 });
+    const orgId = crypto.randomUUID();
+    await db.insert(organizations).values({
+      id: orgId,
+      name: businessName,
+      slug,
+      industry: "hvac",
+      plan: "starter",
+      onboardingCompleted: false,
+    });
+
+    // Note: better-auth will create the user record when signUp.email is called
+    // We just need to update the org_id after. The register page handles this flow.
+
+    return NextResponse.json({ orgId }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unexpected error";
     return NextResponse.json({ error: message }, { status: 500 });

@@ -1,8 +1,11 @@
 import { redirect } from "next/navigation";
-import { createServerSupabase } from "@/lib/supabase/server";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { users, organizations } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { INDUSTRY_CONFIGS } from "@/lib/industry/config";
 import type { IndustrySlug } from "@/lib/constants/brand";
-import type { Organization } from "@/lib/types/database";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 
 export default async function DashboardLayout({
@@ -10,42 +13,58 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const session = await auth.api.getSession({ headers: await headers() });
 
-  if (!user) {
+  if (!session?.user) {
     redirect("/login");
   }
 
-  const orgId = user.user_metadata?.org_id as string | undefined;
-  if (!orgId) {
+  // Get user with org
+  const userRows = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, session.user.id))
+    .limit(1);
+
+  const user = userRows[0];
+  if (!user?.orgId) {
     redirect("/login");
   }
 
-  const { data: org } = await supabase
-    .from("organizations")
-    .select("*")
-    .eq("id", orgId)
-    .single();
+  const orgRows = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.id, user.orgId))
+    .limit(1);
 
+  const org = orgRows[0];
   if (!org) {
     redirect("/login");
   }
 
   const industryConfig =
-    INDUSTRY_CONFIGS[(org as Organization).industry as IndustrySlug] ??
-    INDUSTRY_CONFIGS["hvac"];
+    INDUSTRY_CONFIGS[org.industry as IndustrySlug] ?? INDUSTRY_CONFIGS["hvac"];
 
   return (
     <DashboardShell
-      org={org as Organization}
+      org={{
+        id: org.id,
+        name: org.name,
+        slug: org.slug,
+        industry: org.industry as IndustrySlug,
+        plan: org.plan as "starter" | "pro" | "business",
+        onboarding_completed: org.onboardingCompleted ?? false,
+        settings: (org.settings ?? {}) as never,
+        stripe_customer_id: null,
+        stripe_subscription_id: null,
+        created_at: "",
+        updated_at: "",
+      }}
       industryConfig={industryConfig}
       user={{
         email: user.email ?? "",
-        firstName: (user.user_metadata?.first_name as string) ?? "",
-        lastName: (user.user_metadata?.last_name as string) ?? "",
+        firstName: user.firstName ?? "",
+        lastName: user.lastName ?? "",
       }}
     >
       {children}

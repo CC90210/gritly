@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
+// Import uses /api/import endpoint
 import { useOrgStore } from "@/lib/store/org";
 import {
   Upload, FileText, ChevronDown, ChevronUp,
@@ -180,7 +180,6 @@ export default function ImportPage() {
     setProgress(0);
     setImportError(null);
 
-    const supabase = createClient();
     const result: ImportResult = { clients: 0, jobs: 0, invoices: 0, skipped: 0, errors: [] };
 
     const fieldMap: Record<string, string> = {};
@@ -188,46 +187,43 @@ export default function ImportPage() {
       if (m.gritlyField) fieldMap[m.csvHeader] = m.gritlyField;
     });
 
+    // Map CSV rows to client records
+    const mappedRows = allRows.map((row) => {
+      const record: Record<string, string> = {};
+      headers.forEach((header, idx) => {
+        const field = fieldMap[header];
+        if (field && row[idx]) {
+          record[field] = row[idx];
+        }
+      });
+      return record;
+    });
+
     const BATCH_SIZE = 50;
 
-    for (let i = 0; i < allRows.length; i += BATCH_SIZE) {
-      const batch = allRows.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < mappedRows.length; i += BATCH_SIZE) {
+      const batch = mappedRows.slice(i, i + BATCH_SIZE);
 
-      const clientBatch = batch
-        .map((row) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic CSV row mapping
-          const record: Record<string, any> = { org_id: org.id };
-          headers.forEach((header, idx) => {
-            const field = fieldMap[header];
-            if (field && row[idx]) {
-              record[field] = row[idx];
-            }
-          });
+      try {
+        const res = await fetch("/api/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rows: batch }),
+        });
 
-          // Require at least first_name or last_name or company_name
-          if (!record.first_name && !record.last_name && !record.company_name) {
-            result.skipped++;
-            return null;
-          }
-
-          return record;
-        })
-        .filter(Boolean);
-
-      if (clientBatch.length > 0) {
-        const { data, error } = await supabase
-          .from("clients")
-          .upsert(clientBatch, { ignoreDuplicates: true })
-          .select("id");
-
-        if (error) {
-          result.errors.push(`Row ${i + 1}–${i + batch.length}: ${error.message}`);
+        if (res.ok) {
+          const data = await res.json();
+          result.clients += data.imported ?? 0;
+          result.skipped += data.skipped ?? 0;
+          if (data.errors?.length) result.errors.push(...data.errors);
         } else {
-          result.clients += data?.length ?? 0;
+          result.errors.push(`Batch ${i + 1}–${i + batch.length}: Server error`);
         }
+      } catch {
+        result.errors.push(`Batch ${i + 1}–${i + BATCH_SIZE}: Network error`);
       }
 
-      setProgress(Math.round(((i + BATCH_SIZE) / allRows.length) * 100));
+      setProgress(Math.round(((i + BATCH_SIZE) / mappedRows.length) * 100));
     }
 
     setProgress(100);

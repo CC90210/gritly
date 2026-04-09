@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+// Auth + onboarding handled via API routes
 import { INDUSTRIES, type IndustrySlug } from "@/lib/constants/brand";
 import {
   Thermometer, Wrench, Zap, Paintbrush, TreePine, Home,
@@ -468,19 +468,11 @@ export default function OnboardingPage({ params }: { params: Promise<{ step: str
   }
 
   async function saveStep(step: number, data: StepData) {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const orgId = user.user_metadata?.org_id as string | undefined;
-    if (!orgId) return;
-
-    await supabase.from("onboarding_responses").upsert(
-      // StepData is a union of specific step interfaces, none of which has an index signature.
-      // We cast through unknown first to satisfy the Supabase Insert constraint (data: Record<string,unknown>).
-      { org_id: orgId, step, data: data as unknown as Record<string, unknown> },
-      { onConflict: "org_id,step" }
-    );
+    await fetch("/api/onboarding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ step, data }),
+    });
   }
 
   async function handleNext() {
@@ -506,27 +498,15 @@ export default function OnboardingPage({ params }: { params: Promise<{ step: str
   }
 
   async function finishOnboarding() {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const orgId = user.user_metadata?.org_id as string | undefined;
-    if (!orgId) return;
-
     const industry = ((stepData[1] as Partial<Step1Data> | undefined)?.industry) ?? "hvac";
 
-    // Update org: mark onboarding complete and set industry
-    await supabase
-      .from("organizations")
-      .update({ onboarding_completed: true, industry })
-      .eq("id", orgId);
-
-    // Update user metadata so middleware knows onboarding is done
-    await supabase.auth.updateUser({
-      data: { onboarding_completed: true },
+    await fetch("/api/onboarding", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ industry }),
     });
 
-    router.push("/dash");
+    window.location.href = "/dash";
   }
 
   function handleBack() {

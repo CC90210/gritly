@@ -1,17 +1,14 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+import { signIn } from "@/lib/auth/client";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
-function LoginForm() {
+export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const redirect = searchParams.get("redirect");
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -23,31 +20,24 @@ function LoginForm() {
     setError(null);
 
     try {
-      const supabase = createClient();
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const result = await signIn.email({ email, password });
 
-      if (authError) {
-        setError(authError.message);
+      if (result.error) {
+        setError(result.error.message || "Invalid email or password.");
         return;
       }
 
-      const onboardingCompleted =
-        data.user?.user_metadata?.onboarding_completed as boolean | undefined;
-
-      if (!onboardingCompleted) {
-        router.push("/onboarding/1");
-        return;
+      // Check if onboarding is complete by fetching user data
+      const res = await fetch("/api/me");
+      if (res.ok) {
+        const user = await res.json();
+        if (!user.onboardingCompleted) {
+          window.location.href = "/onboarding/1";
+          return;
+        }
       }
 
-      const role = data.user?.user_metadata?.role as string | undefined;
-      if (role === "client") {
-        router.push(redirect ?? "/portal");
-      } else {
-        router.push(redirect ?? "/dash");
-      }
+      window.location.href = "/dash";
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
@@ -70,10 +60,7 @@ function LoginForm() {
         )}
 
         <div>
-          <label
-            htmlFor="email"
-            className="block text-sm font-medium text-[#d1d5db] mb-1.5"
-          >
+          <label htmlFor="email" className="block text-sm font-medium text-[#d1d5db] mb-1.5">
             Email
           </label>
           <input
@@ -93,20 +80,9 @@ function LoginForm() {
         </div>
 
         <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-[#d1d5db]"
-            >
-              Password
-            </label>
-            <Link
-              href="/forgot-password"
-              className="text-xs text-orange-500 hover:text-orange-400"
-            >
-              Forgot password?
-            </Link>
-          </div>
+          <label htmlFor="password" className="block text-sm font-medium text-[#d1d5db] mb-1.5">
+            Password
+          </label>
           <input
             id="password"
             type="password"
@@ -145,13 +121,5 @@ function LoginForm() {
         </Link>
       </p>
     </>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense>
-      <LoginForm />
-    </Suspense>
   );
 }

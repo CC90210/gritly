@@ -3,21 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+import { signUp } from "@/lib/auth/client";
+import { db } from "@/lib/db";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 50);
-}
-
 export default function RegisterPage() {
   const router = useRouter();
-
   const [businessName, setBusinessName] = useState("");
   const [yourName, setYourName] = useState("");
   const [email, setEmail] = useState("");
@@ -31,57 +23,42 @@ export default function RegisterPage() {
     setError(null);
 
     try {
-      const supabase = createClient();
-
-      const nameParts = yourName.trim().split(" ");
-      const firstName = nameParts[0] ?? "";
-      const lastName = nameParts.slice(1).join(" ");
-
-      // 1. Create the organization first via a server action or API route
-      //    We call our own API route to avoid RLS chicken-and-egg issues
+      // Step 1: Create org via API
       const orgRes = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          businessName,
-          firstName,
-          lastName,
-          email,
-          password,
-        }),
+        body: JSON.stringify({ businessName, name: yourName, email, password }),
       });
 
       if (!orgRes.ok) {
-        const body = (await orgRes.json()) as { error?: string };
-        setError(body.error ?? "Registration failed. Please try again.");
+        const body = await orgRes.json();
+        setError(body.error || "Registration failed.");
         return;
       }
 
-      const { orgId } = (await orgRes.json()) as { orgId: string };
-
-      // 2. Sign in the newly created user
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+      // Step 2: Sign in via better-auth
+      const result = await signUp.email({
         email,
         password,
+        name: yourName,
       });
 
-      if (signInError || !data.user) {
-        setError("Account created — please sign in to continue.");
-        router.push("/login");
-        return;
+      if (result.error) {
+        // User might already exist from the API call — try signing in
+        const signInResult = await (await import("@/lib/auth/client")).signIn.email({ email, password });
+        if (signInResult.error) {
+          setError("Account created but sign-in failed. Please go to the login page.");
+          return;
+        }
       }
 
-      // Redirect to onboarding
-      router.push("/onboarding/1");
+      window.location.href = "/onboarding/1";
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
   }
-
-  // Suppress unused variable warning — orgId used in fetch body indirectly
-  void slugify;
 
   return (
     <>
@@ -98,10 +75,7 @@ export default function RegisterPage() {
         )}
 
         <div>
-          <label
-            htmlFor="businessName"
-            className="block text-sm font-medium text-[#d1d5db] mb-1.5"
-          >
+          <label htmlFor="businessName" className="block text-sm font-medium text-[#d1d5db] mb-1.5">
             Business name
           </label>
           <input
@@ -120,10 +94,7 @@ export default function RegisterPage() {
         </div>
 
         <div>
-          <label
-            htmlFor="yourName"
-            className="block text-sm font-medium text-[#d1d5db] mb-1.5"
-          >
+          <label htmlFor="yourName" className="block text-sm font-medium text-[#d1d5db] mb-1.5">
             Your name
           </label>
           <input
@@ -142,10 +113,7 @@ export default function RegisterPage() {
         </div>
 
         <div>
-          <label
-            htmlFor="email"
-            className="block text-sm font-medium text-[#d1d5db] mb-1.5"
-          >
+          <label htmlFor="email" className="block text-sm font-medium text-[#d1d5db] mb-1.5">
             Work email
           </label>
           <input
@@ -165,10 +133,7 @@ export default function RegisterPage() {
         </div>
 
         <div>
-          <label
-            htmlFor="password"
-            className="block text-sm font-medium text-[#d1d5db] mb-1.5"
-          >
+          <label htmlFor="password" className="block text-sm font-medium text-[#d1d5db] mb-1.5">
             Password
           </label>
           <input
@@ -201,18 +166,6 @@ export default function RegisterPage() {
           {loading && <Loader2 className="w-4 h-4 animate-spin" />}
           Create account
         </button>
-
-        <p className="text-xs text-[#6b7280] text-center">
-          By creating an account you agree to our{" "}
-          <Link href="/terms" className="text-orange-500 hover:text-orange-400">
-            Terms
-          </Link>{" "}
-          and{" "}
-          <Link href="/privacy" className="text-orange-500 hover:text-orange-400">
-            Privacy Policy
-          </Link>
-          .
-        </p>
       </form>
 
       <p className="mt-6 text-center text-sm text-[#6b7280]">
