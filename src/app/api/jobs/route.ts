@@ -2,8 +2,8 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { jobs, organizations, users } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { jobs, organizations, users, clients, quotes } from "@/lib/db/schema";
+import { eq, desc, sql, and } from "drizzle-orm";
 
 export async function GET(_req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -66,20 +66,36 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Auto-increment job counter
-  const [org] = await db
-    .select({ jobCounter: organizations.jobCounter })
-    .from(organizations)
-    .where(eq(organizations.id, orgId))
+  // Verify clientId belongs to the same org — prevents cross-org data access
+  const [client] = await db
+    .select({ id: clients.id })
+    .from(clients)
+    .where(and(eq(clients.id, body.clientId), eq(clients.orgId, orgId)))
     .limit(1);
+  if (!client) {
+    return NextResponse.json({ error: "Invalid clientId" }, { status: 422 });
+  }
 
-  const newCounter = (org?.jobCounter ?? 1000) + 1;
-  await db
+  // Verify quoteId belongs to the same org if provided
+  if (body.quoteId) {
+    const [quote] = await db
+      .select({ id: quotes.id })
+      .from(quotes)
+      .where(and(eq(quotes.id, body.quoteId), eq(quotes.orgId, orgId)))
+      .limit(1);
+    if (!quote) {
+      return NextResponse.json({ error: "Invalid quoteId" }, { status: 422 });
+    }
+  }
+
+  // Atomically increment job counter to prevent duplicate numbers under concurrency
+  const [org] = await db
     .update(organizations)
-    .set({ jobCounter: newCounter })
-    .where(eq(organizations.id, orgId));
+    .set({ jobCounter: sql`job_counter + 1` })
+    .where(eq(organizations.id, orgId))
+    .returning({ jobCounter: organizations.jobCounter });
 
-  const jobNumber = `J-${String(newCounter).padStart(5, "0")}`;
+  const jobNumber = `J-${String(org.jobCounter).padStart(5, "0")}`;
 
   const [job] = await db
     .insert(jobs)

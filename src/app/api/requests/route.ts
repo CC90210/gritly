@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { serviceRequests, users } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { serviceRequests, users, organizations } from "@/lib/db/schema";
+import { eq, desc, and } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
+
+const sanitize = (s: string, max = 500) => s.trim().slice(0, max);
 
 // GET: requires auth (staff listing requests)
 export async function GET(req: NextRequest) {
@@ -58,21 +60,32 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Verify the target org exists — prevents submissions to phantom org IDs
+  const [org] = await db
+    .select({ id: organizations.id })
+    .from(organizations)
+    .where(eq(organizations.id, body.orgId))
+    .limit(1);
+
+  if (!org) {
+    return NextResponse.json({ error: "Invalid organization" }, { status: 404 });
+  }
+
   const [row] = await db
     .insert(serviceRequests)
     .values({
       orgId: body.orgId,
-      firstName: body.firstName,
-      lastName: body.lastName,
-      email: body.email,
-      phone: body.phone ?? null,
-      serviceType: body.serviceType,
-      description: body.description,
-      address: body.address ?? null,
+      firstName: sanitize(body.firstName, 100),
+      lastName: sanitize(body.lastName, 100),
+      email: sanitize(body.email, 254),
+      phone: body.phone ? sanitize(body.phone, 30) : null,
+      serviceType: sanitize(body.serviceType, 100),
+      description: sanitize(body.description, 2000),
+      address: body.address ? sanitize(body.address, 500) : null,
       preferredDate: body.preferredDate ?? null,
       preferredTime: body.preferredTime ?? null,
-      source: body.source ?? "website",
-      notes: body.notes ?? null,
+      source: body.source ? sanitize(body.source, 50) : "website",
+      notes: body.notes ? sanitize(body.notes, 1000) : null,
       status: "new",
     })
     .returning();

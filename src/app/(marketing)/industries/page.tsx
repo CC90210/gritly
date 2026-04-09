@@ -191,7 +191,7 @@ export default function IndustriesPage() {
             Gritly works for any field service business. Start a free trial and configure it for your workflow.
           </p>
           <Link
-            href="/signup"
+            href="/register"
             className="inline-flex items-center gap-2 px-10 py-4 text-base font-bold bg-orange-500 hover:bg-orange-400 text-white rounded-xl transition-all duration-150 shadow-xl shadow-orange-500/20"
           >
             Start Free Trial

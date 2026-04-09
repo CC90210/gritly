@@ -211,7 +211,7 @@ export default function PricingPage() {
                 </div>
 
                 <Link
-                  href="/signup"
+                  href="/register"
                   className={cn(
                     "w-full text-center py-3.5 rounded-xl text-sm font-bold transition-all duration-150 mb-8",
                     plan.popular
@@ -334,7 +334,7 @@ export default function PricingPage() {
             Start your free trial today. No credit card, no commitment.
           </p>
           <Link
-            href="/signup"
+            href="/register"
             className="inline-flex items-center gap-2 px-10 py-4 text-base font-bold bg-orange-500 hover:bg-orange-400 text-white rounded-xl transition-all duration-150 shadow-xl shadow-orange-500/20"
           >
             Start Free Trial

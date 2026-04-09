@@ -124,9 +124,12 @@ export async function PATCH(
       .where(eq(invoices.id, id));
   }
 
-  // Apply other field updates
+  // Apply other field updates — whitelist allowed fields, never allow id, orgId, or counter fields
   const { payment: _payment, ...rest } = body;
-  const updateData: Record<string, unknown> = { ...rest, updatedAt: new Date() };
+  const updateData: Record<string, unknown> = { updatedAt: new Date() };
+  if (rest.status !== undefined) updateData.status = rest.status;
+  if (rest.notes !== undefined) updateData.notes = rest.notes;
+  if (rest.dueDate !== undefined) updateData.dueDate = rest.dueDate;
   if (rest.sentAt) updateData.sentAt = new Date(rest.sentAt);
   if (rest.paidAt) updateData.paidAt = new Date(rest.paidAt);
 

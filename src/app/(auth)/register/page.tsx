@@ -1,15 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { signUp } from "@/lib/auth/client";
-import { db } from "@/lib/db";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [businessName, setBusinessName] = useState("");
   const [yourName, setYourName] = useState("");
   const [email, setEmail] = useState("");
@@ -30,11 +27,12 @@ export default function RegisterPage() {
         body: JSON.stringify({ businessName, name: yourName, email, password }),
       });
 
+      const orgData = await orgRes.json();
       if (!orgRes.ok) {
-        const body = await orgRes.json();
-        setError(body.error || "Registration failed.");
+        setError(orgData.error || "Registration failed.");
         return;
       }
+      const orgId: string = orgData.orgId;
 
       // Step 2: Sign in via better-auth
       const result = await signUp.email({
@@ -51,6 +49,13 @@ export default function RegisterPage() {
           return;
         }
       }
+
+      // Link the authenticated user to their org
+      await fetch("/api/auth/link-org", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgId }),
+      });
 
       window.location.href = "/onboarding/1";
     } catch {

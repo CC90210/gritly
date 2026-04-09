@@ -2,8 +2,8 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { quotes, quoteItems, organizations, users } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { quotes, quoteItems, organizations, users, clients } from "@/lib/db/schema";
+import { eq, desc, sql, and } from "drizzle-orm";
 
 export async function GET(_req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -63,20 +63,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "clientId is required" }, { status: 422 });
   }
 
-  // Auto-increment quote counter
-  const [org] = await db
-    .select({ quoteCounter: organizations.quoteCounter })
-    .from(organizations)
-    .where(eq(organizations.id, orgId))
+  // Verify clientId belongs to the same org — prevents cross-org data access
+  const [client] = await db
+    .select({ id: clients.id })
+    .from(clients)
+    .where(and(eq(clients.id, body.clientId), eq(clients.orgId, orgId)))
     .limit(1);
+  if (!client) {
+    return NextResponse.json({ error: "Invalid clientId" }, { status: 422 });
+  }
 
-  const newCounter = (org?.quoteCounter ?? 1000) + 1;
-  await db
+  // Atomically increment quote counter to prevent duplicate numbers under concurrency
+  const [org] = await db
     .update(organizations)
-    .set({ quoteCounter: newCounter })
-    .where(eq(organizations.id, orgId));
+    .set({ quoteCounter: sql`quote_counter + 1` })
+    .where(eq(organizations.id, orgId))
+    .returning({ quoteCounter: organizations.quoteCounter });
 
-  const quoteNumber = `Q-${String(newCounter).padStart(5, "0")}`;
+  const quoteNumber = `Q-${String(org.quoteCounter).padStart(5, "0")}`;
 
   // Calculate totals from items
   const items = body.items ?? [];

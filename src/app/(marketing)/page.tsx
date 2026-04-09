@@ -238,7 +238,7 @@ function HeroSection() {
           className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4"
         >
           <Link
-            href="/signup"
+            href="/register"
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 text-base font-semibold bg-orange-500 hover:bg-orange-400 text-white rounded-xl transition-all duration-150 shadow-xl shadow-orange-500/25 hover:shadow-orange-500/40 hover:scale-[1.02]"
           >
             Start Free Trial
@@ -526,7 +526,7 @@ function ComparisonSection() {
 
         <FadeIn delay={0.3} className="mt-8 text-center">
           <Link
-            href="/signup"
+            href="/register"
             className="inline-flex items-center gap-2 px-8 py-4 text-base font-semibold bg-orange-500 hover:bg-orange-400 text-white rounded-xl transition-all duration-150 shadow-xl shadow-orange-500/20"
           >
             Switch to Gritly today
@@ -636,7 +636,7 @@ function CTASection() {
           </p>
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
-              href="/signup"
+              href="/register"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-10 py-4 text-lg font-bold bg-orange-500 hover:bg-orange-400 text-white rounded-xl transition-all duration-150 shadow-2xl shadow-orange-500/30 hover:shadow-orange-500/50 hover:scale-[1.02]"
             >
               Start Free Trial

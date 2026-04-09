@@ -65,9 +65,23 @@ export async function PATCH(
     source?: string;
   };
 
+  // Whitelist allowed fields — never allow id, orgId, or internal fields from request body
+  const allowed = {
+    ...(body.firstName !== undefined && { firstName: body.firstName }),
+    ...(body.lastName !== undefined && { lastName: body.lastName }),
+    ...(body.email !== undefined && { email: body.email }),
+    ...(body.phone !== undefined && { phone: body.phone }),
+    ...(body.company !== undefined && { company: body.company }),
+    ...(body.notes !== undefined && { notes: body.notes }),
+    ...(body.tags !== undefined && { tags: body.tags }),
+    ...(body.isLead !== undefined && { isLead: body.isLead }),
+    ...(body.source !== undefined && { source: body.source }),
+    updatedAt: new Date(),
+  };
+
   const [updated] = await db
     .update(clients)
-    .set({ ...body, updatedAt: new Date() })
+    .set(allowed)
     .where(and(eq(clients.id, id), eq(clients.orgId, orgId)))
     .returning();
 

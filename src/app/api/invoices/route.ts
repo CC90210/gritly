@@ -2,8 +2,8 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { invoices, invoiceItems, organizations, users } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { invoices, invoiceItems, organizations, users, clients, jobs, quotes } from "@/lib/db/schema";
+import { eq, desc, sql, and } from "drizzle-orm";
 
 export async function GET(_req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -64,20 +64,48 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Auto-increment invoice counter
-  const [org] = await db
-    .select({ invoiceCounter: organizations.invoiceCounter })
-    .from(organizations)
-    .where(eq(organizations.id, orgId))
+  // Verify clientId belongs to the same org — prevents cross-org data access
+  const [client] = await db
+    .select({ id: clients.id })
+    .from(clients)
+    .where(and(eq(clients.id, body.clientId), eq(clients.orgId, orgId)))
     .limit(1);
+  if (!client) {
+    return NextResponse.json({ error: "Invalid clientId" }, { status: 422 });
+  }
 
-  const newCounter = (org?.invoiceCounter ?? 1000) + 1;
-  await db
+  // Verify jobId belongs to the same org if provided
+  if (body.jobId) {
+    const [job] = await db
+      .select({ id: jobs.id })
+      .from(jobs)
+      .where(and(eq(jobs.id, body.jobId), eq(jobs.orgId, orgId)))
+      .limit(1);
+    if (!job) {
+      return NextResponse.json({ error: "Invalid jobId" }, { status: 422 });
+    }
+  }
+
+  // Verify quoteId belongs to the same org if provided
+  if (body.quoteId) {
+    const [quote] = await db
+      .select({ id: quotes.id })
+      .from(quotes)
+      .where(and(eq(quotes.id, body.quoteId), eq(quotes.orgId, orgId)))
+      .limit(1);
+    if (!quote) {
+      return NextResponse.json({ error: "Invalid quoteId" }, { status: 422 });
+    }
+  }
+
+  // Atomically increment invoice counter to prevent duplicate numbers under concurrency
+  const [org] = await db
     .update(organizations)
-    .set({ invoiceCounter: newCounter })
-    .where(eq(organizations.id, orgId));
+    .set({ invoiceCounter: sql`invoice_counter + 1` })
+    .where(eq(organizations.id, orgId))
+    .returning({ invoiceCounter: organizations.invoiceCounter });
 
-  const invoiceNumber = `INV-${String(newCounter).padStart(5, "0")}`;
+  const invoiceNumber = `INV-${String(org.invoiceCounter).padStart(5, "0")}`;
 
   const items = body.items ?? [];
   const taxRate = body.taxRate ?? 0.13;

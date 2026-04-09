@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, index } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 // ============================================================
@@ -109,7 +109,10 @@ export const clients = sqliteTable("clients", {
   isLead: integer("is_lead", { mode: "boolean" }).default(false),
   source: text("source"),
   stripeCustomerId: text("stripe_customer_id"),
-});
+}, (t) => [
+  index("clients_org_id_idx").on(t.orgId),
+  index("clients_email_idx").on(t.email),
+]);
 
 // ============================================================
 // PROPERTIES
@@ -128,7 +131,10 @@ export const properties = sqliteTable("properties", {
   lat: real("lat"),
   lng: real("lng"),
   isPrimary: integer("is_primary", { mode: "boolean" }).default(true),
-});
+}, (t) => [
+  index("properties_org_id_idx").on(t.orgId),
+  index("properties_client_id_idx").on(t.clientId),
+]);
 
 // ============================================================
 // SERVICE ITEMS (Pricebook)
@@ -145,7 +151,9 @@ export const serviceItems = sqliteTable("service_items", {
   category: text("category"),
   isActive: integer("is_active", { mode: "boolean" }).default(true),
   sortOrder: integer("sort_order").default(0),
-});
+}, (t) => [
+  index("service_items_org_id_idx").on(t.orgId),
+]);
 
 // ============================================================
 // QUOTES
@@ -169,7 +177,11 @@ export const quotes = sqliteTable("quotes", {
   validUntil: text("valid_until"),
   approvedAt: integer("approved_at", { mode: "timestamp" }),
   sentAt: integer("sent_at", { mode: "timestamp" }),
-});
+}, (t) => [
+  index("quotes_org_id_idx").on(t.orgId),
+  index("quotes_client_id_idx").on(t.clientId),
+  index("quotes_status_idx").on(t.status),
+]);
 
 export const quoteItems = sqliteTable("quote_items", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -200,7 +212,9 @@ export const teamMembers = sqliteTable("team_members", {
   hourlyRate: real("hourly_rate"),
   color: text("color").default("#f97316"),
   isActive: integer("is_active", { mode: "boolean" }).default(true),
-});
+}, (t) => [
+  index("team_members_org_id_idx").on(t.orgId),
+]);
 
 // ============================================================
 // JOBS
@@ -227,7 +241,12 @@ export const jobs = sqliteTable("jobs", {
   notes: text("notes"),
   internalNotes: text("internal_notes"),
   totalCost: real("total_cost").default(0),
-});
+}, (t) => [
+  index("jobs_org_id_idx").on(t.orgId),
+  index("jobs_client_id_idx").on(t.clientId),
+  index("jobs_status_idx").on(t.status),
+  index("jobs_scheduled_start_idx").on(t.scheduledStart),
+]);
 
 // ============================================================
 // JOB VISITS
@@ -248,7 +267,10 @@ export const jobVisits = sqliteTable("job_visits", {
   notes: text("notes"),
   photos: text("photos", { mode: "json" }).$type<string[]>().default([]),
   checklist: text("checklist", { mode: "json" }).$type<{ item: string; completed: boolean }[]>().default([]),
-});
+}, (t) => [
+  index("job_visits_org_id_idx").on(t.orgId),
+  index("job_visits_job_id_idx").on(t.jobId),
+]);
 
 // ============================================================
 // INVOICES
@@ -273,7 +295,12 @@ export const invoices = sqliteTable("invoices", {
   paidAt: integer("paid_at", { mode: "timestamp" }),
   notes: text("notes"),
   sentAt: integer("sent_at", { mode: "timestamp" }),
-});
+}, (t) => [
+  index("invoices_org_id_idx").on(t.orgId),
+  index("invoices_client_id_idx").on(t.clientId),
+  index("invoices_status_idx").on(t.status),
+  index("invoices_job_id_idx").on(t.jobId),
+]);
 
 export const invoiceItems = sqliteTable("invoice_items", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -298,7 +325,10 @@ export const payments = sqliteTable("payments", {
   method: text("method").default("credit_card"),
   stripePaymentId: text("stripe_payment_id"),
   notes: text("notes"),
-});
+}, (t) => [
+  index("payments_org_id_idx").on(t.orgId),
+  index("payments_invoice_id_idx").on(t.invoiceId),
+]);
 
 // ============================================================
 // TIME ENTRIES
@@ -314,7 +344,10 @@ export const timeEntries = sqliteTable("time_entries", {
   clockOut: integer("clock_out", { mode: "timestamp" }),
   durationMinutes: integer("duration_minutes"),
   notes: text("notes"),
-});
+}, (t) => [
+  index("time_entries_org_id_idx").on(t.orgId),
+  index("time_entries_job_id_idx").on(t.jobId),
+]);
 
 // ============================================================
 // EXPENSES
@@ -332,7 +365,10 @@ export const expenses = sqliteTable("expenses", {
   receiptUrl: text("receipt_url"),
   isReimbursable: integer("is_reimbursable", { mode: "boolean" }).default(false),
   isReimbursed: integer("is_reimbursed", { mode: "boolean" }).default(false),
-});
+}, (t) => [
+  index("expenses_org_id_idx").on(t.orgId),
+  index("expenses_job_id_idx").on(t.jobId),
+]);
 
 // ============================================================
 // SERVICE REQUESTS (from public booking widget)
@@ -357,7 +393,10 @@ export const serviceRequests = sqliteTable("service_requests", {
   convertedToClientId: text("converted_to_client_id").references(() => clients.id),
   convertedToQuoteId: text("converted_to_quote_id").references(() => quotes.id),
   notes: text("notes"),
-});
+}, (t) => [
+  index("service_requests_org_id_idx").on(t.orgId),
+  index("service_requests_status_idx").on(t.status),
+]);
 
 // ============================================================
 // COMMUNICATIONS LOG
@@ -373,7 +412,10 @@ export const communications = sqliteTable("communications", {
   subject: text("subject"),
   body: text("body").notNull(),
   sentBy: text("sent_by").references(() => teamMembers.id),
-});
+}, (t) => [
+  index("communications_org_id_idx").on(t.orgId),
+  index("communications_client_id_idx").on(t.clientId),
+]);
 
 // ============================================================
 // INVENTORY
@@ -389,7 +431,9 @@ export const inventoryItems = sqliteTable("inventory_items", {
   unitCost: real("unit_cost"),
   location: text("location"),
   category: text("category"),
-});
+}, (t) => [
+  index("inventory_items_org_id_idx").on(t.orgId),
+]);
 
 // ============================================================
 // MAINTENANCE AGREEMENTS
@@ -407,7 +451,10 @@ export const maintenanceAgreements = sqliteTable("maintenance_agreements", {
   endDate: text("end_date"),
   isActive: integer("is_active", { mode: "boolean" }).default(true),
   notes: text("notes"),
-});
+}, (t) => [
+  index("maintenance_agreements_org_id_idx").on(t.orgId),
+  index("maintenance_agreements_client_id_idx").on(t.clientId),
+]);
 
 // ============================================================
 // REVIEW REQUESTS
@@ -422,4 +469,6 @@ export const reviewRequests = sqliteTable("review_requests", {
   sentVia: text("sent_via").default("email"),
   status: text("status").default("pending"),
   reviewUrl: text("review_url"),
-});
+}, (t) => [
+  index("review_requests_org_id_idx").on(t.orgId),
+]);

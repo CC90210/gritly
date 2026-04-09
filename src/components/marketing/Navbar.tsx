@@ -72,7 +72,7 @@ export default function Navbar() {
                 Log In
               </Link>
               <Link
-                href="/signup"
+                href="/register"
                 className="px-5 py-2.5 text-sm font-semibold bg-orange-500 hover:bg-orange-400 text-white rounded-lg transition-all duration-150 shadow-lg shadow-orange-500/20 hover:shadow-orange-500/30"
               >
                 Start Free Trial
@@ -129,7 +129,7 @@ export default function Navbar() {
                 Log In
               </Link>
               <Link
-                href="/signup"
+                href="/register"
                 onClick={() => setMobileOpen(false)}
                 className="px-4 py-3 text-center text-sm font-semibold bg-orange-500 hover:bg-orange-400 text-white rounded-lg transition-colors shadow-lg shadow-orange-500/20"
               >

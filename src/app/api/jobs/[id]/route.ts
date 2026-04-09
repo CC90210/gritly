@@ -73,7 +73,16 @@ export async function PATCH(
     totalCost?: number;
   };
 
-  const updateData: Record<string, unknown> = { ...body, updatedAt: new Date() };
+  // Whitelist allowed fields — never allow id, orgId, jobNumber, or counters from request body
+  const updateData: Record<string, unknown> = { updatedAt: new Date() };
+  if (body.status !== undefined) updateData.status = body.status;
+  if (body.title !== undefined) updateData.title = body.title;
+  if (body.description !== undefined) updateData.description = body.description;
+  if (body.priority !== undefined) updateData.priority = body.priority;
+  if (body.assignedTo !== undefined) updateData.assignedTo = body.assignedTo;
+  if (body.notes !== undefined) updateData.notes = body.notes;
+  if (body.internalNotes !== undefined) updateData.internalNotes = body.internalNotes;
+  if (body.totalCost !== undefined) updateData.totalCost = body.totalCost;
   if (body.scheduledStart) updateData.scheduledStart = new Date(body.scheduledStart);
   if (body.scheduledEnd) updateData.scheduledEnd = new Date(body.scheduledEnd);
   if (body.completedAt) updateData.completedAt = new Date(body.completedAt);

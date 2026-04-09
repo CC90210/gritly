@@ -35,9 +35,21 @@ export async function PATCH(
     isActive?: boolean;
   };
 
+  // Whitelist allowed fields — never allow id, orgId, userId, or other internal fields from request body
+  const allowed = {
+    ...(body.firstName !== undefined && { firstName: body.firstName }),
+    ...(body.lastName !== undefined && { lastName: body.lastName }),
+    ...(body.email !== undefined && { email: body.email }),
+    ...(body.phone !== undefined && { phone: body.phone }),
+    ...(body.role !== undefined && { role: body.role }),
+    ...(body.hourlyRate !== undefined && { hourlyRate: body.hourlyRate }),
+    ...(body.color !== undefined && { color: body.color }),
+    ...(body.isActive !== undefined && { isActive: body.isActive }),
+  };
+
   const [updated] = await db
     .update(teamMembers)
-    .set(body)
+    .set(allowed)
     .where(and(eq(teamMembers.id, id), eq(teamMembers.orgId, orgId)))
     .returning();
 

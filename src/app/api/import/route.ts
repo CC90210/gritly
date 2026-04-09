@@ -25,6 +25,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No rows to import" }, { status: 400 });
     }
 
+    if (rows.length > 5000) {
+      return NextResponse.json(
+        { error: "Import limited to 5,000 rows per request. Split your file and try again." },
+        { status: 422 }
+      );
+    }
+
     let imported = 0;
     let skipped = 0;
     const errors: string[] = [];

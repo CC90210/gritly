@@ -70,9 +70,14 @@ export async function PATCH(
     sentAt?: string;
   };
 
-  const updateData: Record<string, unknown> = { ...body, updatedAt: new Date() };
-
-  // Handle timestamp conversions for date strings
+  // Whitelist allowed fields — never allow id, orgId, quoteNumber, or counters from request body
+  const updateData: Record<string, unknown> = { updatedAt: new Date() };
+  if (body.status !== undefined) updateData.status = body.status;
+  if (body.notes !== undefined) updateData.notes = body.notes;
+  if (body.validUntil !== undefined) updateData.validUntil = body.validUntil;
+  if (body.taxRate !== undefined) updateData.taxRate = body.taxRate;
+  if (body.depositRequired !== undefined) updateData.depositRequired = body.depositRequired;
+  if (body.propertyId !== undefined) updateData.propertyId = body.propertyId;
   if (body.approvedAt) updateData.approvedAt = new Date(body.approvedAt);
   if (body.sentAt) updateData.sentAt = new Date(body.sentAt);
 
