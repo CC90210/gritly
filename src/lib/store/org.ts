@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { Organization } from "@/lib/types/database";
 import type { IndustryConfig } from "@/lib/industry/config";
-// Database generic is not passed to Supabase clients — see src/lib/supabase/client.ts
+
 
 interface OrgStore {
   org: Organization | null;
