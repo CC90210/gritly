@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "@/lib/auth/client";
@@ -132,6 +132,7 @@ export function DashboardShell({
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const { setOrg, setIndustryConfig } = useOrgStore();
 
   // Hydrate the org store on mount
@@ -139,6 +140,18 @@ export function DashboardShell({
     setOrg(org);
     setIndustryConfig(industryConfig);
   }, [org, industryConfig, setOrg, setIndustryConfig]);
+
+  // Close user menu on outside click
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [userMenuOpen]);
 
   // Build industry-specific nav items from enabled modules
   const industryItems: NavItem[] = Object.entries(INDUSTRY_MODULE_NAV)
@@ -208,7 +221,7 @@ export function DashboardShell({
         <NavGroup items={BOTTOM_NAV} pathname={pathname} />
 
         {/* User */}
-        <div className="relative mx-1 mt-1">
+        <div className="relative mx-1 mt-1" ref={userMenuRef}>
           <button
             onClick={() => setUserMenuOpen((v) => !v)}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-[#1f1f1f] transition-all"
@@ -279,15 +292,6 @@ export function DashboardShell({
           >
             <Menu className="w-5 h-5" />
           </button>
-
-          {/* Search */}
-          <div className="flex-1 max-w-sm">
-            <input
-              type="text"
-              placeholder={`Search ${industryConfig.terminology.clientPlural.toLowerCase()}, ${industryConfig.terminology.jobPlural.toLowerCase()}...`}
-              className="w-full bg-[#111111] border border-[#1f1f1f] rounded-lg px-3 py-1.5 text-sm text-white placeholder:text-[#4b5563] focus:outline-none focus:border-orange-500 transition-colors"
-            />
-          </div>
 
           <div className="flex-1" />
 

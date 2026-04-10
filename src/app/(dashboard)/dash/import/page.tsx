@@ -223,7 +223,7 @@ export default function ImportPage() {
         result.errors.push(`Batch ${i + 1}–${i + BATCH_SIZE}: Network error`);
       }
 
-      setProgress(Math.round(((i + BATCH_SIZE) / mappedRows.length) * 100));
+      setProgress(Math.round(((i + batch.length) / mappedRows.length) * 100));
     }
 
     setProgress(100);

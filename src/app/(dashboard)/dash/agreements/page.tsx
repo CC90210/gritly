@@ -36,6 +36,7 @@ export default function AgreementsPage() {
   const [agreements, setAgreements] = useState<Agreement[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -56,17 +57,27 @@ export default function AgreementsPage() {
   }
 
   useEffect(() => {
+    loadAll();
+  }, []);
+
+  function loadAll() {
+    setLoading(true);
+    setFetchError(false);
     Promise.all([
-      fetch("/api/maintenance-agreements").then((r) => r.json()),
+      fetch("/api/maintenance-agreements").then((r) => {
+        if (r.status === 401) { window.location.href = "/login"; throw new Error("401"); }
+        if (!r.ok) throw new Error("Failed");
+        return r.json();
+      }),
       fetch("/api/clients").then((r) => r.json()),
     ])
       .then(([agData, clientData]) => {
         setAgreements(Array.isArray(agData) ? agData : []);
         setClients(Array.isArray(clientData) ? clientData : []);
       })
-      .catch(() => {})
+      .catch(() => setFetchError(true))
       .finally(() => setLoading(false));
-  }, []);
+  }
 
   // Upcoming renewals: agreements ending within 30 days
   const upcomingRenewals = agreements.filter((a) => {
@@ -130,7 +141,7 @@ export default function AgreementsPage() {
         );
       }
     } catch {
-      // silent
+      // silently fail — button re-enables
     } finally {
       setTogglingId(null);
     }
@@ -258,7 +269,7 @@ export default function AgreementsPage() {
       </div>
 
       {/* Upcoming renewals banner */}
-      {upcomingRenewals.length > 0 && (
+      {upcomingRenewals.length > 0 && !fetchError && (
         <div className="flex items-start gap-2 bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-4 py-3 mb-5">
           <AlertCircle className="w-4 h-4 text-yellow-400 mt-0.5 shrink-0" />
           <div>
@@ -275,6 +286,14 @@ export default function AgreementsPage() {
       {loading ? (
         <div className="flex items-center justify-center min-h-[300px]">
           <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
+        </div>
+      ) : fetchError ? (
+        <div className="flex flex-col items-center justify-center min-h-[400px]">
+          <AlertCircle className="w-8 h-8 text-red-400 mb-3" />
+          <p className="text-sm text-[#9ca3af]">Failed to load data. Please try again.</p>
+          <button onClick={loadAll} className="mt-3 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm">
+            Retry
+          </button>
         </div>
       ) : agreements.length === 0 ? (
         <div className="flex flex-col items-center justify-center min-h-[300px] text-center">

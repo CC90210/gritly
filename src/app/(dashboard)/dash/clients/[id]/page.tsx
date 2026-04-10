@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useOrgStore } from "@/lib/store/org";
 import {
   ArrowLeft, Loader2, Pencil, X, Check,
@@ -57,6 +58,7 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
   const { industryConfig } = useOrgStore();
   const labelSingular = industryConfig?.terminology.client ?? "Client";
 
@@ -66,6 +68,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<ClientDetail>>({});
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const [quotes, setQuotes] = useState<QuoteRow[]>([]);
   const [jobs, setJobs] = useState<JobRow[]>([]);
@@ -107,6 +110,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   async function handleSave() {
     if (!client) return;
     setSaving(true);
+    setSaveError(null);
     try {
       const res = await fetch(`/api/clients/${id}`, {
         method: "PATCH",
@@ -124,9 +128,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         const updated = await res.json() as ClientDetail;
         setClient(updated);
         setEditing(false);
+      } else {
+        setSaveError("Failed to save. Please try again.");
       }
     } catch {
-      // keep editing open on error
+      setSaveError("Failed to save. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -226,6 +232,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       {/* Overview tab */}
       {activeTab === "overview" && (
         <div className="bg-[#111111] border border-[#1f1f1f] rounded-2xl p-6 space-y-5">
+          {saveError && (
+            <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 text-sm text-red-400">
+              {saveError}
+            </div>
+          )}
           {editing ? (
             <>
               <div className="grid grid-cols-2 gap-4">
@@ -366,7 +377,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                     <tr
                       key={q.id}
                       className="border-b border-[#1f1f1f]/50 hover:bg-[#1a1a1a] cursor-pointer last:border-0"
-                      onClick={() => window.location.href = `/dash/quotes/${q.id}`}
+                      onClick={() => router.push(`/dash/quotes/${q.id}`)}
                     >
                       <td className="px-4 py-3 text-white font-medium">{q.quoteNumber}</td>
                       <td className="px-4 py-3 text-[#9ca3af]">${q.total.toFixed(2)}</td>
@@ -416,7 +427,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                     <tr
                       key={j.id}
                       className="border-b border-[#1f1f1f]/50 hover:bg-[#1a1a1a] cursor-pointer last:border-0"
-                      onClick={() => window.location.href = `/dash/jobs/${j.id}`}
+                      onClick={() => router.push(`/dash/jobs/${j.id}`)}
                     >
                       <td className="px-4 py-3 text-white font-medium">{j.jobNumber}</td>
                       <td className="px-4 py-3 text-[#9ca3af]">{j.title}</td>
@@ -466,7 +477,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                     <tr
                       key={inv.id}
                       className="border-b border-[#1f1f1f]/50 hover:bg-[#1a1a1a] cursor-pointer last:border-0"
-                      onClick={() => window.location.href = `/dash/invoices/${inv.id}`}
+                      onClick={() => router.push(`/dash/invoices/${inv.id}`)}
                     >
                       <td className="px-4 py-3 text-white font-medium">{inv.invoiceNumber}</td>
                       <td className="px-4 py-3 text-[#9ca3af]">${inv.total.toFixed(2)}</td>

@@ -146,6 +146,7 @@ export default function DashPage() {
   const [stats, setStats] = useState<DashStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEmpty, setIsEmpty] = useState(false);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     if (!org) return;
@@ -158,8 +159,9 @@ export default function DashPage() {
 
     try {
       const res = await fetch("/api/dash/stats");
+      if (res.status === 401) { window.location.href = "/login"; return; }
       if (!res.ok) {
-        setIsEmpty(true);
+        setError(true);
         return;
       }
 
@@ -180,8 +182,9 @@ export default function DashPage() {
         totalClients: data.totalClients ?? 0,
       });
       setIsEmpty(false);
+      setError(false);
     } catch {
-      setIsEmpty(true);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -205,6 +208,21 @@ export default function DashPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px]">
+        <AlertCircle className="w-8 h-8 text-red-400 mb-3" />
+        <p className="text-sm text-[#9ca3af]">Failed to load dashboard data. Please try again.</p>
+        <button
+          onClick={() => { setError(false); setLoading(true); fetchStats(); }}
+          className="mt-3 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm"
+        >
+          Retry
+        </button>
       </div>
     );
   }

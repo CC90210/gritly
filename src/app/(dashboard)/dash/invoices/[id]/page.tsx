@@ -68,6 +68,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Payment modal
   const [showPayModal, setShowPayModal] = useState(false);
@@ -89,6 +90,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
   async function markSent() {
     setActing("sent");
+    setSaveError(null);
     try {
       const res = await fetch(`/api/invoices/${id}`, {
         method: "PATCH",
@@ -97,14 +99,21 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       });
       if (res.ok) {
         setInvoice((prev) => prev ? { ...prev, status: "sent" } : prev);
+      } else {
+        setSaveError("Failed to update invoice. Please try again.");
       }
-    } catch { /* silent */ } finally { setActing(null); }
+    } catch {
+      setSaveError("Failed to update invoice. Please try again.");
+    } finally {
+      setActing(null);
+    }
   }
 
   async function recordPayment() {
     const amount = parseFloat(payAmount);
     if (!amount || amount <= 0) return;
     setPayLoading(true);
+    setSaveError(null);
     try {
       const res = await fetch(`/api/invoices/${id}`, {
         method: "PATCH",
@@ -122,8 +131,14 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         setInvoice(updated);
         setShowPayModal(false);
         setPayNotes("");
+      } else {
+        setSaveError("Failed to record payment. Please try again.");
       }
-    } catch { /* silent */ } finally { setPayLoading(false); }
+    } catch {
+      setSaveError("Failed to record payment. Please try again.");
+    } finally {
+      setPayLoading(false);
+    }
   }
 
   if (loading) {
@@ -231,6 +246,12 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           </p>
         </div>
       </div>
+
+      {saveError && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 text-sm text-red-400 mb-4">
+          {saveError}
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex flex-wrap gap-2 mb-6">

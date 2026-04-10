@@ -60,10 +60,14 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
   const [quote, setQuote] = useState<QuoteDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/quotes/${id}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed");
+        return r.json();
+      })
       .then((d: QuoteDetail) => setQuote(d))
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -71,6 +75,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
 
   async function patchStatus(status: string) {
     setActing(status);
+    setSaveError(null);
     try {
       const res = await fetch(`/api/quotes/${id}`, {
         method: "PATCH",
@@ -80,9 +85,11 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
       if (res.ok) {
         const updated = await res.json() as QuoteDetail;
         setQuote((prev) => prev ? { ...prev, status: updated.status ?? status } : prev);
+      } else {
+        setSaveError("Failed to save. Please try again.");
       }
     } catch {
-      // silent — UI stays in current state
+      setSaveError("Failed to save. Please try again.");
     } finally {
       setActing(null);
     }
@@ -90,6 +97,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
 
   async function convertToJob() {
     setActing("convert");
+    setSaveError(null);
     try {
       const res = await fetch(`/api/quotes/${id}`, {
         method: "PATCH",
@@ -101,9 +109,11 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
         if (data.jobId) {
           router.push(`/dash/jobs/${data.jobId}`);
         }
+      } else {
+        setSaveError("Failed to convert to job. Please try again.");
       }
     } catch {
-      // silent
+      setSaveError("Failed to convert to job. Please try again.");
     } finally {
       setActing(null);
     }
@@ -149,6 +159,12 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
           </p>
         </div>
       </div>
+
+      {saveError && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 text-sm text-red-400 mb-4">
+          {saveError}
+        </div>
+      )}
 
       {/* Action buttons */}
       <div className="flex flex-wrap gap-2 mb-6">

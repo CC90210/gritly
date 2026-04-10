@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useOrgStore } from "@/lib/store/org";
-import { Briefcase, Plus, Loader2, LayoutGrid, List } from "lucide-react";
+import { Briefcase, Plus, Loader2, LayoutGrid, List, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 interface JobRow {
@@ -37,21 +38,33 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function JobsPage() {
+  const router = useRouter();
   const { industryConfig } = useOrgStore();
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [view, setView] = useState<"list" | "kanban">("list");
 
   const jobLabel = industryConfig?.terminology.job ?? "Job";
   const jobLabelPlural = industryConfig?.terminology.jobPlural ?? "Jobs";
 
   useEffect(() => {
-    fetch("/api/jobs")
-      .then((r) => r.json())
-      .then((d) => setJobs(Array.isArray(d) ? d : []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    loadJobs();
   }, []);
+
+  function loadJobs() {
+    setLoading(true);
+    setError(false);
+    fetch("/api/jobs")
+      .then((r) => {
+        if (r.status === 401) { window.location.href = "/login"; return; }
+        if (!r.ok) throw new Error("Failed");
+        return r.json();
+      })
+      .then((d) => { if (d) setJobs(Array.isArray(d) ? d : []); })
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
+  }
 
   const byStatus = STATUS_ORDER.reduce<Record<string, JobRow[]>>((acc, status) => {
     acc[status] = jobs.filter((j) => j.status === status);
@@ -101,6 +114,14 @@ export default function JobsPage() {
         <div className="flex items-center justify-center min-h-[300px]">
           <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
         </div>
+      ) : error ? (
+        <div className="flex flex-col items-center justify-center min-h-[400px]">
+          <AlertCircle className="w-8 h-8 text-red-400 mb-3" />
+          <p className="text-sm text-[#9ca3af]">Failed to load data. Please try again.</p>
+          <button onClick={loadJobs} className="mt-3 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm">
+            Retry
+          </button>
+        </div>
       ) : jobs.length === 0 ? (
         <div className="flex flex-col items-center justify-center min-h-[300px] text-center">
           <div className="w-12 h-12 rounded-2xl bg-orange-500/10 flex items-center justify-center mb-4">
@@ -133,7 +154,7 @@ export default function JobsPage() {
                   <tr
                     key={j.id}
                     className="border-b border-[#1f1f1f]/50 hover:bg-[#1a1a1a] cursor-pointer transition-colors last:border-0"
-                    onClick={() => window.location.href = `/dash/jobs/${j.id}`}
+                    onClick={() => router.push(`/dash/jobs/${j.id}`)}
                   >
                     <td className="px-4 py-3 text-white font-medium">{j.jobNumber}</td>
                     <td className="px-4 py-3 text-[#d1d5db]">{j.title}</td>

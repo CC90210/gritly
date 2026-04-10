@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useOrgStore } from "@/lib/store/org";
-import { Users, Plus, Search, Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils/cn";
+import { Users, Plus, Search, Loader2, AlertCircle } from "lucide-react";
 
 interface ClientRow {
   id: string;
@@ -18,9 +18,11 @@ interface ClientRow {
 }
 
 export default function ClientsPage() {
+  const router = useRouter();
   const { industryConfig } = useOrgStore();
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
 
@@ -33,16 +35,25 @@ export default function ClientsPage() {
   }, [search]);
 
   useEffect(() => {
+    loadClients();
+  }, [query]);
+
+  function loadClients() {
     setLoading(true);
+    setError(false);
     const url = query ? `/api/clients?search=${encodeURIComponent(query)}` : "/api/clients";
     fetch(url)
-      .then((r) => r.json())
-      .then((d) => {
-        setClients(Array.isArray(d) ? d : (d.clients ?? []));
+      .then((r) => {
+        if (r.status === 401) { window.location.href = "/login"; return; }
+        if (!r.ok) throw new Error("Failed");
+        return r.json();
       })
-      .catch(() => {})
+      .then((d) => {
+        if (d) setClients(Array.isArray(d) ? d : (d.clients ?? []));
+      })
+      .catch(() => setError(true))
       .finally(() => setLoading(false));
-  }, [query]);
+  }
 
   return (
     <div>
@@ -75,6 +86,17 @@ export default function ClientsPage() {
       {loading ? (
         <div className="flex items-center justify-center min-h-[300px]">
           <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
+        </div>
+      ) : error ? (
+        <div className="flex flex-col items-center justify-center min-h-[400px]">
+          <AlertCircle className="w-8 h-8 text-red-400 mb-3" />
+          <p className="text-sm text-[#9ca3af]">Failed to load data. Please try again.</p>
+          <button
+            onClick={loadClients}
+            className="mt-3 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm"
+          >
+            Retry
+          </button>
         </div>
       ) : clients.length === 0 ? (
         <div className="flex flex-col items-center justify-center min-h-[300px] text-center">
@@ -109,7 +131,7 @@ export default function ClientsPage() {
                   <tr
                     key={c.id}
                     className="border-b border-[#1f1f1f]/50 hover:bg-[#1a1a1a] cursor-pointer transition-colors last:border-0"
-                    onClick={() => window.location.href = `/dash/clients/${c.id}`}
+                    onClick={() => router.push(`/dash/clients/${c.id}`)}
                   >
                     <td className="px-4 py-3">
                       <p className="text-white font-medium">

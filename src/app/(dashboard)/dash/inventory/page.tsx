@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Archive, Plus, X, Pencil, Trash2, Loader2, AlertTriangle } from "lucide-react";
+import { Archive, Plus, X, Pencil, Trash2, Loader2, AlertTriangle, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 interface InventoryItem {
@@ -18,6 +18,7 @@ interface InventoryItem {
 export default function InventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
@@ -62,12 +63,22 @@ export default function InventoryPage() {
   }
 
   useEffect(() => {
-    fetch("/api/inventory")
-      .then((r) => r.json())
-      .then((d) => setItems(Array.isArray(d) ? d : []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    loadItems();
   }, []);
+
+  function loadItems() {
+    setLoading(true);
+    setFetchError(false);
+    fetch("/api/inventory")
+      .then((r) => {
+        if (r.status === 401) { window.location.href = "/login"; return; }
+        if (!r.ok) throw new Error("Failed");
+        return r.json();
+      })
+      .then((d) => { if (d) setItems(Array.isArray(d) ? d : []); })
+      .catch(() => setFetchError(true))
+      .finally(() => setLoading(false));
+  }
 
   const categories = ["all", ...Array.from(new Set(items.map((i) => i.category ?? "Uncategorized")))];
   const filtered = activeCategory === "all"
@@ -120,12 +131,17 @@ export default function InventoryPage() {
   }
 
   async function handleDelete(id: string) {
+    if (!confirm("Delete this inventory item? This cannot be undone.")) return;
     setDeletingId(id);
     try {
-      await fetch(`/api/inventory?id=${id}`, { method: "DELETE" });
-      setItems((prev) => prev.filter((i) => i.id !== id));
+      const res = await fetch(`/api/inventory?id=${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setItems((prev) => prev.filter((i) => i.id !== id));
+      } else {
+        setFetchError(true);
+      }
     } catch {
-      // silent
+      setFetchError(true);
     } finally {
       setDeletingId(null);
     }
@@ -266,7 +282,7 @@ export default function InventoryPage() {
       </div>
 
       {/* Low stock alert */}
-      {lowStockCount > 0 && (
+      {lowStockCount > 0 && !fetchError && (
         <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 mb-5">
           <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
           <p className="text-sm text-red-400">
@@ -298,6 +314,14 @@ export default function InventoryPage() {
       {loading ? (
         <div className="flex items-center justify-center min-h-[300px]">
           <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
+        </div>
+      ) : fetchError ? (
+        <div className="flex flex-col items-center justify-center min-h-[400px]">
+          <AlertCircle className="w-8 h-8 text-red-400 mb-3" />
+          <p className="text-sm text-[#9ca3af]">Failed to load data. Please try again.</p>
+          <button onClick={loadItems} className="mt-3 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm">
+            Retry
+          </button>
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center min-h-[300px] text-center">

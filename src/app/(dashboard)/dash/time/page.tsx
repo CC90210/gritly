@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useOrgStore } from "@/lib/store/org";
-import { Clock, Play, Square, Plus, Loader2, X } from "lucide-react";
+import { Clock, Play, Square, Plus, Loader2, X, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 interface TimeEntryRow {
@@ -23,6 +23,12 @@ interface TeamMemberOption {
   id: string;
   firstName: string;
   lastName: string;
+}
+
+interface JobOption {
+  id: string;
+  jobNumber: string;
+  title: string;
 }
 
 function formatDuration(minutes: number | null): string {
@@ -47,7 +53,9 @@ export default function TimeTrackingPage() {
 
   const [entries, setEntries] = useState<TimeEntryRow[]>([]);
   const [members, setMembers] = useState<TeamMemberOption[]>([]);
+  const [jobs, setJobs] = useState<JobOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [filterMember, setFilterMember] = useState("");
   const [showClockIn, setShowClockIn] = useState(false);
   const [clockInForm, setClockInForm] = useState({ teamMemberId: "", jobId: "", notes: "" });
@@ -56,17 +64,29 @@ export default function TimeTrackingPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    loadAll();
+  }, []);
+
+  function loadAll() {
+    setLoading(true);
+    setFetchError(false);
     Promise.all([
-      fetch("/api/time-entries").then((r) => r.json()),
+      fetch("/api/time-entries").then((r) => {
+        if (r.status === 401) { window.location.href = "/login"; throw new Error("401"); }
+        if (!r.ok) throw new Error("Failed");
+        return r.json();
+      }),
       fetch("/api/team").then((r) => r.json()),
+      fetch("/api/jobs").then((r) => r.json()),
     ])
-      .then(([entriesData, membersData]) => {
+      .then(([entriesData, membersData, jobsData]) => {
         setEntries(Array.isArray(entriesData) ? entriesData : []);
         setMembers(Array.isArray(membersData) ? membersData : []);
+        setJobs(Array.isArray(jobsData) ? jobsData : []);
       })
-      .catch(() => {})
+      .catch(() => setFetchError(true))
       .finally(() => setLoading(false));
-  }, []);
+  }
 
   const filtered = filterMember
     ? entries.filter((e) => e.teamMemberId === filterMember)
@@ -103,7 +123,6 @@ export default function TimeTrackingPage() {
         setError((d as { error?: string }).error ?? "Failed to clock in.");
         return;
       }
-      // Reload entries
       const updated = await fetch("/api/time-entries").then((r) => r.json());
       setEntries(Array.isArray(updated) ? updated : []);
       setShowClockIn(false);
@@ -118,15 +137,17 @@ export default function TimeTrackingPage() {
   async function handleClockOut(id: string) {
     setClockingOut(id);
     try {
-      await fetch("/api/time-entries", {
+      const res = await fetch("/api/time-entries", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, clockOut: new Date().toISOString() }),
       });
-      const updated = await fetch("/api/time-entries").then((r) => r.json());
-      setEntries(Array.isArray(updated) ? updated : []);
+      if (res.ok) {
+        const updated = await fetch("/api/time-entries").then((r) => r.json());
+        setEntries(Array.isArray(updated) ? updated : []);
+      }
     } catch {
-      // silent
+      // silently fail — will show stale state, user can retry
     } finally {
       setClockingOut(null);
     }
@@ -162,6 +183,19 @@ export default function TimeTrackingPage() {
                   <option value="">Select member...</option>
                   {members.map((m) => (
                     <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>Job (optional)</label>
+                <select
+                  value={clockInForm.jobId}
+                  onChange={(e) => setClockInForm((p) => ({ ...p, jobId: e.target.value }))}
+                  className={inputClass}
+                >
+                  <option value="">No job selected</option>
+                  {jobs.map((j) => (
+                    <option key={j.id} value={j.id}>{j.jobNumber} — {j.title}</option>
                   ))}
                 </select>
               </div>
@@ -259,6 +293,14 @@ export default function TimeTrackingPage() {
       {loading ? (
         <div className="flex items-center justify-center min-h-[200px]">
           <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
+        </div>
+      ) : fetchError ? (
+        <div className="flex flex-col items-center justify-center min-h-[400px]">
+          <AlertCircle className="w-8 h-8 text-red-400 mb-3" />
+          <p className="text-sm text-[#9ca3af]">Failed to load data. Please try again.</p>
+          <button onClick={loadAll} className="mt-3 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm">
+            Retry
+          </button>
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center min-h-[250px] text-center">

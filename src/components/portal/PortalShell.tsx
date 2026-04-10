@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/lib/auth/client";
@@ -35,6 +35,18 @@ export default function PortalShell({ orgName, user, clientName, children }: Por
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [userMenuOpen]);
 
   async function handleSignOut() {
     await signOut();
@@ -91,7 +103,7 @@ export default function PortalShell({ orgName, user, clientName, children }: Por
 
       {/* User */}
       <div className="border-t border-[#1f2937] p-2">
-        <div className="relative">
+        <div className="relative" ref={userMenuRef}>
           <button
             onClick={() => setUserMenuOpen((v) => !v)}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#1f1f1f] transition-all"

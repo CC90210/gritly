@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Star, Plus, Loader2, X, Search } from "lucide-react";
+import { Star, Plus, Loader2, X, Search, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 interface ReviewRequest {
   id: string;
   clientId: string;
   jobId: string | null;
-  platform: string;
+  sentVia: string;
   status: string;
   sentAt: string | null;
   createdAt: string;
@@ -46,9 +46,11 @@ function StatusBadge({ status }: { status: string }) {
 export default function ReviewsPage() {
   const [reviews, setReviews] = useState<ReviewRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [clientMap, setClientMap] = useState<Map<string, string>>(new Map());
 
   // Client selector
   const [clientSearch, setClientSearch] = useState("");
@@ -58,12 +60,33 @@ export default function ReviewsPage() {
   const [platform, setPlatform] = useState("google");
 
   useEffect(() => {
-    fetch("/api/reviews")
+    loadReviews();
+    // Pre-fetch all clients for the name lookup map
+    fetch("/api/clients")
       .then((r) => r.json())
-      .then((d) => setReviews(Array.isArray(d) ? d : []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      .then((d) => {
+        const map = new Map<string, string>();
+        (Array.isArray(d) ? d : []).forEach((c: ClientOption) =>
+          map.set(c.id, `${c.firstName} ${c.lastName}`)
+        );
+        setClientMap(map);
+      })
+      .catch(() => {});
   }, []);
+
+  function loadReviews() {
+    setLoading(true);
+    setFetchError(false);
+    fetch("/api/reviews")
+      .then((r) => {
+        if (r.status === 401) { window.location.href = "/login"; return; }
+        if (!r.ok) throw new Error("Failed");
+        return r.json();
+      })
+      .then((d) => { if (d) setReviews(Array.isArray(d) ? d : []); })
+      .catch(() => setFetchError(true))
+      .finally(() => setLoading(false));
+  }
 
   useEffect(() => {
     if (clientSearch.length < 2) { setClientOptions([]); return; }
@@ -98,6 +121,12 @@ export default function ReviewsPage() {
       }
       const created = await res.json() as ReviewRequest;
       setReviews((prev) => [created, ...prev]);
+      // Update client map with the new client if needed
+      setClientMap((prev) => {
+        const next = new Map(prev);
+        next.set(selectedClient.id, `${selectedClient.firstName} ${selectedClient.lastName}`);
+        return next;
+      });
       setShowModal(false);
       setSelectedClient(null);
       setClientSearch("");
@@ -228,6 +257,14 @@ export default function ReviewsPage() {
         <div className="flex items-center justify-center min-h-[300px]">
           <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
         </div>
+      ) : fetchError ? (
+        <div className="flex flex-col items-center justify-center min-h-[400px]">
+          <AlertCircle className="w-8 h-8 text-red-400 mb-3" />
+          <p className="text-sm text-[#9ca3af]">Failed to load data. Please try again.</p>
+          <button onClick={loadReviews} className="mt-3 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm">
+            Retry
+          </button>
+        </div>
       ) : reviews.length === 0 ? (
         <div className="flex flex-col items-center justify-center min-h-[300px] text-center">
           <div className="w-12 h-12 rounded-2xl bg-orange-500/10 flex items-center justify-center mb-4">
@@ -262,11 +299,11 @@ export default function ReviewsPage() {
                 {reviews.map((r) => (
                   <tr key={r.id} className="border-b border-[#1f1f1f]/50 last:border-0">
                     <td className="px-4 py-3 text-[#9ca3af] text-xs">
-                      {r.clientId.slice(0, 8)}…
+                      {clientMap.get(r.clientId) ?? "Unknown"}
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell">
                       <span className="px-2 py-0.5 bg-[#1f1f1f] rounded-full text-xs text-[#9ca3af]">
-                        {PLATFORM_LABELS[r.platform] ?? r.platform}
+                        {PLATFORM_LABELS[r.sentVia] ?? r.sentVia}
                       </span>
                     </td>
                     <td className="px-4 py-3"><StatusBadge status={r.status} /></td>

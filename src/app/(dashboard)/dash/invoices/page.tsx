@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Receipt, Plus, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
@@ -36,16 +37,42 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function InvoicesPage() {
+  const router = useRouter();
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [clientMap, setClientMap] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
-    fetch("/api/invoices")
+    fetch("/api/clients")
       .then((r) => r.json())
-      .then((d) => setInvoices(Array.isArray(d) ? d : []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      .then((d) => {
+        const map = new Map<string, string>();
+        (Array.isArray(d) ? d : []).forEach((c: { id: string; firstName: string; lastName: string }) =>
+          map.set(c.id, `${c.firstName} ${c.lastName}`)
+        );
+        setClientMap(map);
+      })
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    loadInvoices();
+  }, []);
+
+  function loadInvoices() {
+    setLoading(true);
+    setError(false);
+    fetch("/api/invoices")
+      .then((r) => {
+        if (r.status === 401) { window.location.href = "/login"; return; }
+        if (!r.ok) throw new Error("Failed");
+        return r.json();
+      })
+      .then((d) => { if (d) setInvoices(Array.isArray(d) ? d : []); })
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
+  }
 
   const overdueCount = invoices.filter((inv) => inv.status === "overdue").length;
 
@@ -65,7 +92,7 @@ export default function InvoicesPage() {
         </Link>
       </div>
 
-      {overdueCount > 0 && (
+      {overdueCount > 0 && !error && (
         <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 mb-5">
           <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
           <p className="text-sm text-red-400">
@@ -77,6 +104,14 @@ export default function InvoicesPage() {
       {loading ? (
         <div className="flex items-center justify-center min-h-[300px]">
           <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
+        </div>
+      ) : error ? (
+        <div className="flex flex-col items-center justify-center min-h-[400px]">
+          <AlertCircle className="w-8 h-8 text-red-400 mb-3" />
+          <p className="text-sm text-[#9ca3af]">Failed to load data. Please try again.</p>
+          <button onClick={loadInvoices} className="mt-3 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm">
+            Retry
+          </button>
         </div>
       ) : invoices.length === 0 ? (
         <div className="flex flex-col items-center justify-center min-h-[300px] text-center">
@@ -115,11 +150,11 @@ export default function InvoicesPage() {
                       "border-b border-[#1f1f1f]/50 hover:bg-[#1a1a1a] cursor-pointer transition-colors last:border-0",
                       inv.status === "overdue" && "bg-red-500/5"
                     )}
-                    onClick={() => window.location.href = `/dash/invoices/${inv.id}`}
+                    onClick={() => router.push(`/dash/invoices/${inv.id}`)}
                   >
                     <td className="px-4 py-3 text-white font-medium">{inv.invoiceNumber}</td>
-                    <td className="px-4 py-3 text-[#6b7280] text-xs hidden sm:table-cell">
-                      {inv.clientId.slice(0, 8)}…
+                    <td className="px-4 py-3 text-[#9ca3af] hidden sm:table-cell">
+                      {clientMap.get(inv.clientId) ?? "Unknown"}
                     </td>
                     <td className="px-4 py-3 text-[#d1d5db]">${inv.total.toFixed(2)}</td>
                     <td className="px-4 py-3 text-green-400 hidden md:table-cell">

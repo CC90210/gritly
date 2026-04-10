@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useOrgStore } from "@/lib/store/org";
-import { UserCog, Plus, X, Loader2 } from "lucide-react";
+import { UserCog, Plus, X, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 interface TeamMember {
@@ -30,6 +30,7 @@ export default function TeamPage() {
 
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,12 +50,22 @@ export default function TeamPage() {
   }
 
   useEffect(() => {
-    fetch("/api/team")
-      .then((r) => r.json())
-      .then((d) => setMembers(Array.isArray(d) ? d : []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    loadTeam();
   }, []);
+
+  function loadTeam() {
+    setLoading(true);
+    setFetchError(false);
+    fetch("/api/team")
+      .then((r) => {
+        if (r.status === 401) { window.location.href = "/login"; return; }
+        if (!r.ok) throw new Error("Failed");
+        return r.json();
+      })
+      .then((d) => { if (d) setMembers(Array.isArray(d) ? d : []); })
+      .catch(() => setFetchError(true))
+      .finally(() => setLoading(false));
+  }
 
   async function handleAdd() {
     if (!form.firstName || !form.lastName || !form.email) {
@@ -231,6 +242,14 @@ export default function TeamPage() {
       {loading ? (
         <div className="flex items-center justify-center min-h-[300px]">
           <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
+        </div>
+      ) : fetchError ? (
+        <div className="flex flex-col items-center justify-center min-h-[400px]">
+          <AlertCircle className="w-8 h-8 text-red-400 mb-3" />
+          <p className="text-sm text-[#9ca3af]">Failed to load data. Please try again.</p>
+          <button onClick={loadTeam} className="mt-3 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm">
+            Retry
+          </button>
         </div>
       ) : members.length === 0 ? (
         <div className="flex flex-col items-center justify-center min-h-[300px] text-center">
