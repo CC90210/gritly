@@ -1,34 +1,18 @@
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { clients, users } from "@/lib/db/schema";
 import { eq, and, or, like, desc } from "drizzle-orm";
-
-async function getOrgId(): Promise<string | null> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) return null;
-  const rows = await db
-    .select({ orgId: users.orgId })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-  return rows[0]?.orgId ?? null;
-}
+import { requireRole, isAuthorized } from "@/lib/auth/require-role";
+import { rateLimit } from "@/lib/middleware/rate-limit";
+import { logAudit } from "@/lib/audit";
 
 export async function GET(req: NextRequest) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireRole("technician");
+  if (!isAuthorized(authResult)) return authResult;
+  const { orgId, userId } = authResult;
 
-  const userRows = await db
-    .select({ orgId: users.orgId })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-  const orgId = userRows[0]?.orgId;
-  if (!orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
   const search = req.nextUrl.searchParams.get("search");
 
@@ -54,18 +38,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireRole("manager");
+  if (!isAuthorized(authResult)) return authResult;
+  const { orgId, userId } = authResult;
 
-  const userRows = await db
-    .select({ orgId: users.orgId })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-  const orgId = userRows[0]?.orgId;
-  if (!orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
   const body = await req.json() as {
     firstName?: string;
@@ -101,6 +79,8 @@ export async function POST(req: NextRequest) {
       source: body.source ?? null,
     })
     .returning();
+
+  logAudit({ orgId, userId, action: "create", entityType: "client", entityId: row.id });
 
   return NextResponse.json(row, { status: 201 });
 }

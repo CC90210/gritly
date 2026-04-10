@@ -1,26 +1,21 @@
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { jobs, jobVisits, users } from "@/lib/db/schema";
+import { jobs, jobVisits } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import { requireRole, isAuthorized } from "@/lib/auth/require-role";
+import { rateLimit } from "@/lib/middleware/rate-limit";
+import { logAudit } from "@/lib/audit";
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireRole("technician");
+  if (!isAuthorized(authResult)) return authResult;
+  const { orgId, userId } = authResult;
 
-  const userRows = await db
-    .select({ orgId: users.orgId })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-  const orgId = userRows[0]?.orgId;
-  if (!orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
   const { id } = await params;
 
@@ -44,18 +39,12 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireRole("manager");
+  if (!isAuthorized(authResult)) return authResult;
+  const { orgId, userId } = authResult;
 
-  const userRows = await db
-    .select({ orgId: users.orgId })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-  const orgId = userRows[0]?.orgId;
-  if (!orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
   const { id } = await params;
 
@@ -73,7 +62,6 @@ export async function PATCH(
     totalCost?: number;
   };
 
-  // Whitelist allowed fields — never allow id, orgId, jobNumber, or counters from request body
   const updateData: Record<string, unknown> = { updatedAt: new Date() };
   if (body.status !== undefined) updateData.status = body.status;
   if (body.title !== undefined) updateData.title = body.title;
@@ -95,6 +83,8 @@ export async function PATCH(
 
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  logAudit({ orgId, userId, action: "update", entityType: "job", entityId: id, metadata: body });
+
   const visits = await db
     .select()
     .from(jobVisits)
@@ -107,18 +97,12 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireRole("admin");
+  if (!isAuthorized(authResult)) return authResult;
+  const { orgId, userId } = authResult;
 
-  const userRows = await db
-    .select({ orgId: users.orgId })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-  const orgId = userRows[0]?.orgId;
-  if (!orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
   const { id } = await params;
 
@@ -130,9 +114,10 @@ export async function DELETE(
 
   if (!job) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Delete child visits first
   await db.delete(jobVisits).where(eq(jobVisits.jobId, id));
   await db.delete(jobs).where(eq(jobs.id, id));
+
+  logAudit({ orgId, userId, action: "delete", entityType: "job", entityId: id });
 
   return NextResponse.json({ success: true });
 }

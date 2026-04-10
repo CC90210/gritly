@@ -5,6 +5,7 @@ import { useOrgStore } from "@/lib/store/org";
 import {
   DollarSign, FileText, Briefcase, Users,
   AlertCircle, TrendingUp, Loader2, TrendingDown,
+  BarChart2, Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
@@ -18,7 +19,11 @@ interface ReportsData {
   totalRevenue: number;
   netProfit: number;
   conversionRate: number;
+  avgJobValue: number;
+  avgQuoteValue: number;
   revenueByMonth: { month: string; revenue: number; expenses: number }[];
+  topClients: { name: string; total: number }[];
+  topServices: { name: string; count: number; totalRevenue: number }[];
 }
 
 interface StatCardProps {
@@ -149,7 +154,7 @@ export default function ReportsPage() {
                 color="text-blue-400"
               />
               <StatCard
-                label={`Total ${"quotePlural" in terminology ? terminology.quotePlural : `${terminology.quote}s`}`}
+                label={`Total ${"quotePlural" in terminology ? String(terminology.quotePlural) : `${terminology.quote}s`}`}
                 value={String(data?.totalQuotes ?? 0)}
                 icon={FileText}
                 color="text-blue-400"
@@ -167,6 +172,27 @@ export default function ReportsPage() {
                 icon={TrendingUp}
                 color="text-orange-400"
                 subtext={`${terminology.quote}s approved`}
+              />
+            </div>
+          </div>
+
+          {/* Averages section */}
+          <div>
+            <h2 className="text-xs font-semibold text-[#4b5563] uppercase tracking-wider mb-3">Averages</h2>
+            <div className="grid grid-cols-2 gap-3">
+              <StatCard
+                label={`Avg ${terminology.job} Value`}
+                value={formatMoney(data?.avgJobValue ?? 0)}
+                icon={BarChart2}
+                color="text-purple-400"
+                subtext="Avg invoice per job"
+              />
+              <StatCard
+                label={`Avg ${terminology.quote} Value`}
+                value={formatMoney(data?.avgQuoteValue ?? 0)}
+                icon={BarChart2}
+                color="text-purple-400"
+                subtext={`Avg quote total`}
               />
             </div>
           </div>
@@ -212,6 +238,86 @@ export default function ReportsPage() {
               </table>
             </div>
           </div>
+
+          {/* Top clients and services side by side */}
+          {((data?.topClients?.length ?? 0) > 0 || (data?.topServices?.length ?? 0) > 0) && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Top clients */}
+              {(data?.topClients?.length ?? 0) > 0 && (
+                <div>
+                  <h2 className="text-xs font-semibold text-[#4b5563] uppercase tracking-wider mb-3">
+                    Top 5 {terminology.clientPlural} by Revenue
+                  </h2>
+                  <div className="bg-[#111111] border border-[#1f1f1f] rounded-2xl overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-[#1f1f1f]">
+                          <th className="text-left px-4 py-3 text-xs font-semibold text-[#4b5563] uppercase tracking-wide">{terminology.client}</th>
+                          <th className="text-right px-4 py-3 text-xs font-semibold text-[#4b5563] uppercase tracking-wide">Revenue</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(data?.topClients ?? []).map((c, i) => (
+                          <tr key={i} className="border-b border-[#1a1a1a] last:border-0 hover:bg-[#0d0d0d] transition-colors">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-[#4b5563] font-mono w-4 text-center">#{i + 1}</span>
+                                <div className="w-6 h-6 rounded-full bg-orange-500/20 flex items-center justify-center shrink-0">
+                                  <Star className="w-3 h-3 text-orange-400" />
+                                </div>
+                                <span className="text-white font-medium">{c.name}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-right text-green-400 tabular-nums font-semibold">
+                              {formatMoney(c.total)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Top services */}
+              {(data?.topServices?.length ?? 0) > 0 && (
+                <div>
+                  <h2 className="text-xs font-semibold text-[#4b5563] uppercase tracking-wider mb-3">
+                    Top 5 Services by Frequency
+                  </h2>
+                  <div className="bg-[#111111] border border-[#1f1f1f] rounded-2xl overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-[#1f1f1f]">
+                          <th className="text-left px-4 py-3 text-xs font-semibold text-[#4b5563] uppercase tracking-wide">Service</th>
+                          <th className="text-right px-4 py-3 text-xs font-semibold text-[#4b5563] uppercase tracking-wide">Times</th>
+                          <th className="text-right px-4 py-3 text-xs font-semibold text-[#4b5563] uppercase tracking-wide hidden sm:table-cell">Revenue</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(data?.topServices ?? []).map((s, i) => (
+                          <tr key={i} className="border-b border-[#1a1a1a] last:border-0 hover:bg-[#0d0d0d] transition-colors">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-[#4b5563] font-mono w-4 text-center">#{i + 1}</span>
+                                <span className="text-white font-medium truncate max-w-[140px]">{s.name}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-right text-orange-400 font-semibold tabular-nums">
+                              {s.count}x
+                            </td>
+                            <td className="px-4 py-3 text-right text-green-400 tabular-nums hidden sm:table-cell">
+                              {formatMoney(s.totalRevenue)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Empty state */}
           {data?.totalClients === 0 && (

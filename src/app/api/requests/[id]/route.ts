@@ -1,26 +1,21 @@
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { serviceRequests, clients, users } from "@/lib/db/schema";
+import { serviceRequests, clients } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import { requireRole, isAuthorized } from "@/lib/auth/require-role";
+import { rateLimit } from "@/lib/middleware/rate-limit";
+import { logAudit } from "@/lib/audit";
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireRole("manager");
+  if (!isAuthorized(authResult)) return authResult;
+  const { orgId, userId } = authResult;
 
-  const userRows = await db
-    .select({ orgId: users.orgId })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-  const orgId = userRows[0]?.orgId;
-  if (!orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
   const { id } = await params;
 
@@ -40,7 +35,6 @@ export async function PATCH(
 
   let convertedClientId: string | undefined;
 
-  // Convert to client if requested
   if (body.convertToClient && !request.convertedToClientId) {
     const [newClient] = await db
       .insert(clients)
@@ -56,6 +50,7 @@ export async function PATCH(
       .returning();
 
     convertedClientId = newClient.id;
+    logAudit({ orgId, userId, action: "create", entityType: "client", entityId: newClient.id, metadata: { convertedFromRequest: id } });
   }
 
   const updateData: Record<string, unknown> = {
@@ -74,6 +69,8 @@ export async function PATCH(
     .set(updateData)
     .where(and(eq(serviceRequests.id, id), eq(serviceRequests.orgId, orgId)))
     .returning();
+
+  logAudit({ orgId, userId, action: "update", entityType: "service_request", entityId: id, metadata: body });
 
   return NextResponse.json({
     ...updated,

@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { organizations, users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { rateLimit } from "@/lib/middleware/rate-limit";
 
 function slugify(text: string): string {
   return text
@@ -11,8 +12,12 @@ function slugify(text: string): string {
     .slice(0, 50);
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const limited = rateLimit(`ip:auth:${ip}`, 10, 60_000);
+    if (limited) return limited;
+
     const body = await request.json();
     const { businessName, name, email, password } = body;
 
@@ -30,7 +35,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if email already exists
     const existing = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
     if (existing.length > 0) {
       return NextResponse.json(
@@ -39,7 +43,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create the organization
     let slug = slugify(businessName);
     const existingSlugs = await db.select({ id: organizations.id }).from(organizations).where(eq(organizations.slug, slug)).limit(1);
     if (existingSlugs.length > 0) {
@@ -55,9 +58,6 @@ export async function POST(request: Request) {
       plan: "starter",
       onboardingCompleted: false,
     });
-
-    // Note: better-auth will create the user record when signUp.email is called
-    // We just need to update the org_id after. The register page handles this flow.
 
     return NextResponse.json({ orgId }, { status: 201 });
   } catch (err) {

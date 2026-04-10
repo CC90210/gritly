@@ -1,23 +1,17 @@
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { jobVisits, users } from "@/lib/db/schema";
+import { jobVisits } from "@/lib/db/schema";
 import { eq, and, gte, lte } from "drizzle-orm";
+import { requireRole, isAuthorized } from "@/lib/auth/require-role";
+import { rateLimit } from "@/lib/middleware/rate-limit";
 
 export async function GET(req: NextRequest) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireRole("technician");
+  if (!isAuthorized(authResult)) return authResult;
+  const { orgId, userId } = authResult;
 
-  const userRows = await db
-    .select({ orgId: users.orgId })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-  const orgId = userRows[0]?.orgId;
-  if (!orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
   const startParam = req.nextUrl.searchParams.get("start");
   const endParam = req.nextUrl.searchParams.get("end");
@@ -29,7 +23,6 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // scheduledDate is stored as text (YYYY-MM-DD), so use string comparison
   const rows = await db
     .select()
     .from(jobVisits)

@@ -1,26 +1,21 @@
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { quotes, quoteItems, users } from "@/lib/db/schema";
+import { quotes, quoteItems } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import { requireRole, isAuthorized } from "@/lib/auth/require-role";
+import { rateLimit } from "@/lib/middleware/rate-limit";
+import { logAudit } from "@/lib/audit";
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireRole("technician");
+  if (!isAuthorized(authResult)) return authResult;
+  const { orgId, userId } = authResult;
 
-  const userRows = await db
-    .select({ orgId: users.orgId })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-  const orgId = userRows[0]?.orgId;
-  if (!orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
   const { id } = await params;
 
@@ -44,18 +39,12 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireRole("manager");
+  if (!isAuthorized(authResult)) return authResult;
+  const { orgId, userId } = authResult;
 
-  const userRows = await db
-    .select({ orgId: users.orgId })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-  const orgId = userRows[0]?.orgId;
-  if (!orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
   const { id } = await params;
 
@@ -70,7 +59,6 @@ export async function PATCH(
     sentAt?: string;
   };
 
-  // Whitelist allowed fields — never allow id, orgId, quoteNumber, or counters from request body
   const updateData: Record<string, unknown> = { updatedAt: new Date() };
   if (body.status !== undefined) updateData.status = body.status;
   if (body.notes !== undefined) updateData.notes = body.notes;
@@ -89,6 +77,8 @@ export async function PATCH(
 
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  logAudit({ orgId, userId, action: "update", entityType: "quote", entityId: id, metadata: body });
+
   const items = await db
     .select()
     .from(quoteItems)
@@ -101,22 +91,15 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireRole("admin");
+  if (!isAuthorized(authResult)) return authResult;
+  const { orgId, userId } = authResult;
 
-  const userRows = await db
-    .select({ orgId: users.orgId })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-  const orgId = userRows[0]?.orgId;
-  if (!orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
   const { id } = await params;
 
-  // Verify ownership before cascading delete of items
   const [quote] = await db
     .select()
     .from(quotes)
@@ -127,6 +110,8 @@ export async function DELETE(
 
   await db.delete(quoteItems).where(eq(quoteItems.quoteId, id));
   await db.delete(quotes).where(eq(quotes.id, id));
+
+  logAudit({ orgId, userId, action: "delete", entityType: "quote", entityId: id });
 
   return NextResponse.json({ success: true });
 }

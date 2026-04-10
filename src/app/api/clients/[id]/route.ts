@@ -1,26 +1,21 @@
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { clients, users } from "@/lib/db/schema";
+import { clients, quotes, jobs, invoices } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import { requireRole, isAuthorized } from "@/lib/auth/require-role";
+import { rateLimit } from "@/lib/middleware/rate-limit";
+import { logAudit } from "@/lib/audit";
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireRole("technician");
+  if (!isAuthorized(authResult)) return authResult;
+  const { orgId, userId } = authResult;
 
-  const userRows = await db
-    .select({ orgId: users.orgId })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-  const orgId = userRows[0]?.orgId;
-  if (!orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
   const { id } = await params;
 
@@ -38,18 +33,12 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireRole("manager");
+  if (!isAuthorized(authResult)) return authResult;
+  const { orgId, userId } = authResult;
 
-  const userRows = await db
-    .select({ orgId: users.orgId })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-  const orgId = userRows[0]?.orgId;
-  if (!orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
   const { id } = await params;
 
@@ -65,7 +54,6 @@ export async function PATCH(
     source?: string;
   };
 
-  // Whitelist allowed fields — never allow id, orgId, or internal fields from request body
   const allowed = {
     ...(body.firstName !== undefined && { firstName: body.firstName }),
     ...(body.lastName !== undefined && { lastName: body.lastName }),
@@ -86,6 +74,9 @@ export async function PATCH(
     .returning();
 
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  logAudit({ orgId, userId, action: "update", entityType: "client", entityId: id, metadata: body });
+
   return NextResponse.json(updated);
 }
 
@@ -93,20 +84,51 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireRole("admin");
+  if (!isAuthorized(authResult)) return authResult;
+  const { orgId, userId } = authResult;
 
-  const userRows = await db
-    .select({ orgId: users.orgId })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-  const orgId = userRows[0]?.orgId;
-  if (!orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
   const { id } = await params;
+
+  // Cascade delete protection: check for related entities
+  const [quoteRef] = await db
+    .select({ id: quotes.id })
+    .from(quotes)
+    .where(and(eq(quotes.clientId, id), eq(quotes.orgId, orgId)))
+    .limit(1);
+  if (quoteRef) {
+    return NextResponse.json(
+      { error: "Cannot delete client with existing quotes. Delete or reassign them first." },
+      { status: 422 }
+    );
+  }
+
+  const [jobRef] = await db
+    .select({ id: jobs.id })
+    .from(jobs)
+    .where(and(eq(jobs.clientId, id), eq(jobs.orgId, orgId)))
+    .limit(1);
+  if (jobRef) {
+    return NextResponse.json(
+      { error: "Cannot delete client with existing jobs. Delete or reassign them first." },
+      { status: 422 }
+    );
+  }
+
+  const [invoiceRef] = await db
+    .select({ id: invoices.id })
+    .from(invoices)
+    .where(and(eq(invoices.clientId, id), eq(invoices.orgId, orgId)))
+    .limit(1);
+  if (invoiceRef) {
+    return NextResponse.json(
+      { error: "Cannot delete client with existing invoices. Delete or reassign them first." },
+      { status: 422 }
+    );
+  }
 
   const [deleted] = await db
     .delete(clients)
@@ -114,5 +136,8 @@ export async function DELETE(
     .returning();
 
   if (!deleted) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  logAudit({ orgId, userId, action: "delete", entityType: "client", entityId: id });
+
   return NextResponse.json({ success: true });
 }

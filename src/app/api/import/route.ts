@@ -1,22 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
 import { db } from "@/lib/db";
-import { users, clients } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { clients } from "@/lib/db/schema";
+import { requireRole, isAuthorized } from "@/lib/auth/require-role";
+import { rateLimit } from "@/lib/middleware/rate-limit";
+import { logAudit } from "@/lib/audit";
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authResult = await requireRole("admin");
+    if (!isAuthorized(authResult)) return authResult;
+    const { orgId, userId } = authResult;
 
-    const userRows = await db.select({ orgId: users.orgId }).from(users).where(eq(users.id, session.user.id)).limit(1);
-    const orgId = userRows[0]?.orgId;
-    if (!orgId) {
-      return NextResponse.json({ error: "No org" }, { status: 400 });
-    }
+    const limited = rateLimit(`session:${userId}`, 60, 60_000);
+    if (limited) return limited;
 
     const body = await request.json();
     const { rows } = body as { rows: Record<string, string>[] };
@@ -63,6 +59,8 @@ export async function POST(request: NextRequest) {
         skipped++;
       }
     }
+
+    logAudit({ orgId, userId, action: "create", entityType: "client", entityId: "bulk-import", metadata: { imported, skipped } });
 
     return NextResponse.json({ imported, skipped, errors });
   } catch (err) {

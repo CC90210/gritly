@@ -472,3 +472,23 @@ export const reviewRequests = sqliteTable("review_requests", {
 }, (t) => [
   index("review_requests_org_id_idx").on(t.orgId),
 ]);
+
+// ============================================================
+// AUDIT LOGS
+// ============================================================
+
+export const auditLogs = sqliteTable("audit_logs", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+  orgId: text("org_id").notNull().references(() => organizations.id),
+  userId: text("user_id").notNull(),
+  action: text("action").notNull(), // create | update | delete
+  entityType: text("entity_type").notNull(), // client | quote | job | invoice | etc.
+  entityId: text("entity_id").notNull(),
+  metadata: text("metadata", { mode: "json" }).$type<Record<string, unknown>>().default({}),
+}, (t) => [
+  index("audit_logs_org_id_idx").on(t.orgId),
+  index("audit_logs_entity_type_idx").on(t.entityType),
+  index("audit_logs_entity_id_idx").on(t.entityId),
+  index("audit_logs_created_at_idx").on(t.createdAt),
+]);

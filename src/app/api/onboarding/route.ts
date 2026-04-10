@@ -4,14 +4,18 @@ import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { users, organizations, onboardingResponses } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import { rateLimit } from "@/lib/middleware/rate-limit";
+import { logAudit } from "@/lib/audit";
 
-// Save an onboarding step
 export async function POST(request: NextRequest) {
   try {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const limited = rateLimit(`session:${session.user.id}`, 60, 60_000);
+    if (limited) return limited;
 
     const body = await request.json();
     const { step, data } = body;
@@ -22,7 +26,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No org" }, { status: 400 });
     }
 
-    // Upsert the step response
     const existing = await db
       .select({ id: onboardingResponses.id })
       .from(onboardingResponses)
@@ -42,19 +45,23 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    logAudit({ orgId, userId: session.user.id, action: "update", entityType: "onboarding", entityId: orgId, metadata: { step } });
+
     return NextResponse.json({ success: true });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });
   }
 }
 
-// Complete onboarding (called after step 5)
 export async function PUT(request: NextRequest) {
   try {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const limited = rateLimit(`session:${session.user.id}`, 60, 60_000);
+    if (limited) return limited;
 
     const body = await request.json();
     const { industry } = body;
@@ -65,7 +72,6 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "No org" }, { status: 400 });
     }
 
-    // Update org with industry and mark onboarding complete
     await db
       .update(organizations)
       .set({
@@ -73,6 +79,8 @@ export async function PUT(request: NextRequest) {
         onboardingCompleted: true,
       })
       .where(eq(organizations.id, orgId));
+
+    logAudit({ orgId, userId: session.user.id, action: "update", entityType: "organization", entityId: orgId, metadata: { onboardingCompleted: true, industry } });
 
     return NextResponse.json({ success: true });
   } catch (err) {

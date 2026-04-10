@@ -1,23 +1,18 @@
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { jobs, organizations, users, clients, quotes } from "@/lib/db/schema";
+import { jobs, organizations, clients, quotes } from "@/lib/db/schema";
 import { eq, desc, sql, and } from "drizzle-orm";
+import { requireRole, isAuthorized } from "@/lib/auth/require-role";
+import { rateLimit } from "@/lib/middleware/rate-limit";
+import { logAudit } from "@/lib/audit";
 
 export async function GET(req: NextRequest) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireRole("technician");
+  if (!isAuthorized(authResult)) return authResult;
+  const { orgId, userId } = authResult;
 
-  const userRows = await db
-    .select({ orgId: users.orgId })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-  const orgId = userRows[0]?.orgId;
-  if (!orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
   const { searchParams } = new URL(req.url);
   const clientId = searchParams.get("clientId");
@@ -36,18 +31,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireRole("manager");
+  if (!isAuthorized(authResult)) return authResult;
+  const { orgId, userId } = authResult;
 
-  const userRows = await db
-    .select({ orgId: users.orgId })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-  const orgId = userRows[0]?.orgId;
-  if (!orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
   const body = await req.json() as {
     clientId?: string;
@@ -73,7 +62,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Verify clientId belongs to the same org — prevents cross-org data access
   const [client] = await db
     .select({ id: clients.id })
     .from(clients)
@@ -83,7 +71,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid clientId" }, { status: 422 });
   }
 
-  // Verify quoteId belongs to the same org if provided
   if (body.quoteId) {
     const [quote] = await db
       .select({ id: quotes.id })
@@ -95,7 +82,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Atomically increment job counter to prevent duplicate numbers under concurrency
   const [org] = await db
     .update(organizations)
     .set({ jobCounter: sql`job_counter + 1` })
@@ -125,6 +111,8 @@ export async function POST(req: NextRequest) {
       totalCost: body.totalCost ?? 0,
     })
     .returning();
+
+  logAudit({ orgId, userId, action: "create", entityType: "job", entityId: job.id });
 
   return NextResponse.json(job, { status: 201 });
 }

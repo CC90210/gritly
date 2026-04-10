@@ -1,9 +1,10 @@
+import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { users, organizations } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { rateLimit } from "@/lib/middleware/rate-limit";
 
 export async function GET() {
   try {
@@ -13,7 +14,9 @@ export async function GET() {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    // Get user with org info
+    const limited = rateLimit(`session:${session.user.id}`, 60, 60_000);
+    if (limited) return limited;
+
     const userRows = await db
       .select({
         id: users.id,

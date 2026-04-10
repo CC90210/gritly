@@ -14,6 +14,7 @@ import {
   Settings, Upload, ChevronDown, LogOut, Menu, X,
   Wrench, Flame, Thermometer, Droplets, Zap, Beaker,
   ShieldCheck, Palette, Archive, Star, RefreshCw, Layers,
+  BookOpen, FileCheck,
 } from "lucide-react";
 
 interface NavItem {
@@ -43,6 +44,8 @@ const OPS_NAV: NavItem[] = [
 const TEAM_NAV: NavItem[] = [
   { label: "Team", href: "/dash/team", icon: UserCog },
   { label: "Time Tracking", href: "/dash/time", icon: Clock },
+  { label: "Pricebook", href: "/dash/pricebook", icon: BookOpen },
+  { label: "Agreements", href: "/dash/agreements", icon: FileCheck },
 ];
 
 const BOTTOM_NAV: NavItem[] = [

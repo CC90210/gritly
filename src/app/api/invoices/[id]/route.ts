@@ -1,26 +1,21 @@
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { invoices, invoiceItems, payments, users } from "@/lib/db/schema";
+import { invoices, invoiceItems, payments } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import { requireRole, isAuthorized } from "@/lib/auth/require-role";
+import { rateLimit } from "@/lib/middleware/rate-limit";
+import { logAudit } from "@/lib/audit";
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireRole("technician");
+  if (!isAuthorized(authResult)) return authResult;
+  const { orgId, userId } = authResult;
 
-  const userRows = await db
-    .select({ orgId: users.orgId })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-  const orgId = userRows[0]?.orgId;
-  if (!orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
   const { id } = await params;
 
@@ -49,18 +44,12 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireRole("manager");
+  if (!isAuthorized(authResult)) return authResult;
+  const { orgId, userId } = authResult;
 
-  const userRows = await db
-    .select({ orgId: users.orgId })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-  const orgId = userRows[0]?.orgId;
-  if (!orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
   const { id } = await params;
 
@@ -70,7 +59,6 @@ export async function PATCH(
     dueDate?: string;
     sentAt?: string;
     paidAt?: string;
-    // Payment recording
     payment?: {
       amount: number;
       method?: string;
@@ -79,7 +67,6 @@ export async function PATCH(
     };
   };
 
-  // Verify ownership
   const [invoice] = await db
     .select()
     .from(invoices)
@@ -88,23 +75,21 @@ export async function PATCH(
 
   if (!invoice) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Record payment if provided
   if (body.payment) {
     const { amount, method, notes: paymentNotes, stripePaymentId } = body.payment;
     if (!amount || amount <= 0) {
       return NextResponse.json({ error: "Payment amount must be positive" }, { status: 422 });
     }
 
-    await db.insert(payments).values({
+    const [paymentRow] = await db.insert(payments).values({
       orgId,
       invoiceId: id,
       amount,
       method: method ?? "credit_card",
       stripePaymentId: stripePaymentId ?? null,
       notes: paymentNotes ?? null,
-    });
+    }).returning();
 
-    // Recalculate amountPaid from all payments
     const allPayments = await db
       .select()
       .from(payments)
@@ -122,9 +107,10 @@ export async function PATCH(
         updatedAt: new Date(),
       })
       .where(eq(invoices.id, id));
+
+    logAudit({ orgId, userId, action: "create", entityType: "payment", entityId: paymentRow.id, metadata: { invoiceId: id, amount } });
   }
 
-  // Apply other field updates — whitelist allowed fields, never allow id, orgId, or counter fields
   const { payment: _payment, ...rest } = body;
   const updateData: Record<string, unknown> = { updatedAt: new Date() };
   if (rest.status !== undefined) updateData.status = rest.status;
@@ -139,6 +125,8 @@ export async function PATCH(
       .set(updateData)
       .where(and(eq(invoices.id, id), eq(invoices.orgId, orgId)));
   }
+
+  logAudit({ orgId, userId, action: "update", entityType: "invoice", entityId: id, metadata: rest });
 
   const [updated] = await db
     .select()

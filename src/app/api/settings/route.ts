@@ -1,23 +1,18 @@
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { organizations, users } from "@/lib/db/schema";
+import { organizations } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { requireRole, isAuthorized } from "@/lib/auth/require-role";
+import { rateLimit } from "@/lib/middleware/rate-limit";
+import { logAudit } from "@/lib/audit";
 
 export async function GET() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireRole("technician");
+  if (!isAuthorized(authResult)) return authResult;
+  const { orgId, userId } = authResult;
 
-  const userRows = await db
-    .select({ orgId: users.orgId })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-  const orgId = userRows[0]?.orgId;
-  if (!orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
   const [org] = await db
     .select({ name: organizations.name, settings: organizations.settings })
@@ -31,25 +26,18 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireRole("admin");
+  if (!isAuthorized(authResult)) return authResult;
+  const { orgId, userId } = authResult;
 
-  const userRows = await db
-    .select({ orgId: users.orgId })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-  const orgId = userRows[0]?.orgId;
-  if (!orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
   const body = await req.json() as {
     name?: string;
     settings?: Record<string, unknown>;
   };
 
-  // Fetch existing org to merge settings rather than replace wholesale
   const [existing] = await db
     .select({ name: organizations.name, settings: organizations.settings })
     .from(organizations)
@@ -71,7 +59,6 @@ export async function PATCH(req: NextRequest) {
     if (typeof body.settings !== "object" || Array.isArray(body.settings)) {
       return NextResponse.json({ error: "settings must be an object" }, { status: 422 });
     }
-    // Merge with existing settings — callers send only the fields they changed
     updateData.settings = { ...(existing.settings ?? {}), ...body.settings };
   }
 
@@ -84,6 +71,8 @@ export async function PATCH(req: NextRequest) {
     .set(updateData)
     .where(eq(organizations.id, orgId))
     .returning({ name: organizations.name, settings: organizations.settings });
+
+  logAudit({ orgId, userId, action: "update", entityType: "organization", entityId: orgId, metadata: body });
 
   return NextResponse.json({ name: updated.name, settings: updated.settings ?? {} });
 }

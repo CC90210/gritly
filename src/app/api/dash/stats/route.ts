@@ -1,22 +1,18 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
 import { db } from "@/lib/db";
-import { users, clients, quotes, jobs, invoices, serviceRequests, payments } from "@/lib/db/schema";
+import { clients, quotes, jobs, invoices, serviceRequests, payments } from "@/lib/db/schema";
 import { eq, and, sql, inArray } from "drizzle-orm";
+import { requireRole, isAuthorized } from "@/lib/auth/require-role";
+import { rateLimit } from "@/lib/middleware/rate-limit";
 
 export async function GET() {
   try {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authResult = await requireRole("technician");
+    if (!isAuthorized(authResult)) return authResult;
+    const { orgId, userId } = authResult;
 
-    const userRows = await db.select({ orgId: users.orgId }).from(users).where(eq(users.id, session.user.id)).limit(1);
-    const orgId = userRows[0]?.orgId;
-    if (!orgId) {
-      return NextResponse.json({ error: "No org" }, { status: 400 });
-    }
+    const limited = rateLimit(`session:${userId}`, 60, 60_000);
+    if (limited) return limited;
 
     const [clientCount, quoteCount, jobCount, invoiceCount, requestCount, paymentSum] = await Promise.all([
       db.select({ count: sql<number>`count(*)` }).from(clients).where(eq(clients.orgId, orgId)),
