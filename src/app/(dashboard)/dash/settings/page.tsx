@@ -1,45 +1,108 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useOrgStore } from "@/lib/store/org";
 import { Settings, Loader2, Check } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 type SettingsTab = "company" | "billing" | "integrations";
 
+interface SettingsResponse {
+  name: string;
+  settings: Record<string, unknown>;
+}
+
 export default function SettingsPage() {
-  const { org } = useOrgStore();
+  const { org, setOrg } = useOrgStore();
   const [activeTab, setActiveTab] = useState<SettingsTab>("company");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const settings = org?.settings;
-
-  const [form, setForm] = useState({
+  const [form, setFormState] = useState({
     businessName: org?.name ?? "",
-    phone: settings?.phone ?? "",
-    address: settings?.address ?? "",
-    city: settings?.city ?? "",
-    state: settings?.state ?? "",
-    zip: settings?.zip ?? "",
-    taxRate: String(settings?.taxRate ?? 13),
-    taxName: settings?.taxName ?? "HST",
-    website: settings?.website ?? "",
+    phone: (org?.settings?.phone as string | undefined) ?? "",
+    address: (org?.settings?.address as string | undefined) ?? "",
+    city: (org?.settings?.city as string | undefined) ?? "",
+    state: (org?.settings?.state as string | undefined) ?? "",
+    zip: (org?.settings?.zip as string | undefined) ?? "",
+    taxRate: String((org?.settings?.taxRate as number | undefined) ?? 13),
+    taxName: (org?.settings?.taxName as string | undefined) ?? "HST",
+    website: (org?.settings?.website as string | undefined) ?? "",
   });
 
+  // Load fresh settings from API on mount — source of truth is the DB, not client store
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load settings");
+        return r.json() as Promise<SettingsResponse>;
+      })
+      .then((data) => {
+        const s = data.settings;
+        setFormState({
+          businessName: data.name ?? "",
+          phone: (s?.phone as string | undefined) ?? "",
+          address: (s?.address as string | undefined) ?? "",
+          city: (s?.city as string | undefined) ?? "",
+          state: (s?.state as string | undefined) ?? "",
+          zip: (s?.zip as string | undefined) ?? "",
+          taxRate: String((s?.taxRate as number | undefined) ?? 13),
+          taxName: (s?.taxName as string | undefined) ?? "HST",
+          website: (s?.website as string | undefined) ?? "",
+        });
+      })
+      .catch(() => setLoadError("Could not load settings."));
+  }, []);
+
   function setField(field: keyof typeof form, value: string) {
-    setForm((prev) => ({ ...prev, [field]: value }));
+    setFormState((prev) => ({ ...prev, [field]: value }));
   }
 
   async function handleSave() {
     setSaving(true);
     setSaved(false);
-    // Settings save would go to a /api/me/org or /api/settings endpoint
-    // For now, simulate success after a short delay
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setLoadError(null);
+
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.businessName,
+          settings: {
+            phone: form.phone || null,
+            address: form.address || null,
+            city: form.city || null,
+            state: form.state || null,
+            zip: form.zip || null,
+            taxRate: parseFloat(form.taxRate) || 13,
+            taxName: form.taxName || "HST",
+            website: form.website || null,
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json() as { error?: string };
+        throw new Error(err.error ?? "Save failed");
+      }
+
+      const data = await res.json() as SettingsResponse;
+
+      // Sync updated name back into the org store so nav reflects it immediately
+      if (org) {
+        // Cast via unknown — the API returns the same shape as OrgSettings but typed as Record<string, unknown>
+        setOrg({ ...org, name: data.name, settings: data.settings as unknown as typeof org.settings });
+      }
+
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const TABS: { key: SettingsTab; label: string }[] = [
@@ -54,6 +117,12 @@ export default function SettingsPage() {
         <h1 className="text-xl font-semibold text-white">Settings</h1>
         <p className="text-sm text-[#6b7280] mt-0.5">Manage your account and preferences.</p>
       </div>
+
+      {loadError && (
+        <div className="mb-4 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-400">
+          {loadError}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-[#111111] border border-[#1f1f1f] rounded-xl p-1">

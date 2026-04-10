@@ -3,9 +3,9 @@ import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { expenses, users } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -19,10 +19,17 @@ export async function GET(_req: NextRequest) {
   const orgId = userRows[0]?.orgId;
   if (!orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
 
+  const { searchParams } = new URL(req.url);
+  const jobId = searchParams.get("jobId");
+
+  const where = jobId
+    ? and(eq(expenses.orgId, orgId), eq(expenses.jobId, jobId))
+    : eq(expenses.orgId, orgId);
+
   const rows = await db
     .select()
     .from(expenses)
-    .where(eq(expenses.orgId, orgId))
+    .where(where)
     .orderBy(desc(expenses.createdAt));
 
   return NextResponse.json(rows);

@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { quotes, quoteItems, organizations, users, clients } from "@/lib/db/schema";
 import { eq, desc, sql, and } from "drizzle-orm";
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -19,10 +19,17 @@ export async function GET(_req: NextRequest) {
   const orgId = userRows[0]?.orgId;
   if (!orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
 
+  const { searchParams } = new URL(req.url);
+  const clientId = searchParams.get("clientId");
+
+  const where = clientId
+    ? and(eq(quotes.orgId, orgId), eq(quotes.clientId, clientId))
+    : eq(quotes.orgId, orgId);
+
   const rows = await db
     .select()
     .from(quotes)
-    .where(eq(quotes.orgId, orgId))
+    .where(where)
     .orderBy(desc(quotes.createdAt));
 
   return NextResponse.json(rows);
