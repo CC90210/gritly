@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
 review_request.py
-After a job is completed, create a review_request record for the client.
+After a job is completed, create a review_request record for the client
+and send an email review request.
 
 Queries jobs where:
   - status = 'completed'
   - completed_at is within the last 24 hours
 
 Skips jobs that already have a pending/sent review request.
-In production, the review_request record would trigger a Twilio/SendGrid
-notification via a webhook or a separate delivery worker.
 """
 
 import sys
@@ -22,6 +21,9 @@ from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env.local"))
 
+from email_service import GritlyEmailService
+from templates import review_request_template
+
 
 def get_db() -> libsql.Connection:
     url = os.getenv("TURSO_DATABASE_URL")
@@ -33,14 +35,24 @@ def get_db() -> libsql.Connection:
     return libsql.connect(url, auth_token=token)
 
 
+def _build_email_service() -> GritlyEmailService | None:
+    try:
+        return GritlyEmailService.from_env()
+    except EnvironmentError as exc:
+        print(f"[EMAIL] Not configured — skipping email delivery: {exc}")
+        return None
+
+
 def run(org_id: str | None = None) -> None:
     db = get_db()
+    email_svc = _build_email_service()
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-    # Turso stores timestamps as Unix epoch integers
     cutoff_ts = int(cutoff.timestamp())
 
-    # Fetch all orgs to iterate (or scope to a single org if --org-id provided)
+    app_url = os.getenv("APP_URL", "https://gritly.vercel.app")
+    cc_email = os.getenv("CC_EMAIL") or os.getenv("FROM_EMAIL")
+
     if org_id:
         orgs = db.execute("SELECT id, name FROM organizations WHERE id = ?", [org_id]).rows
     else:
@@ -54,14 +66,15 @@ def run(org_id: str | None = None) -> None:
         org_name: str = org[1]
 
         try:
-            # Find completed jobs in the last 24 hours for this org
             completed_jobs = db.execute(
                 """
-                SELECT id, client_id, job_number, title
-                FROM jobs
-                WHERE org_id = ?
-                  AND status = 'completed'
-                  AND completed_at >= ?
+                SELECT j.id, j.client_id, j.job_number, j.title,
+                       c.first_name, c.last_name, c.email
+                FROM jobs j
+                JOIN clients c ON c.id = j.client_id
+                WHERE j.org_id = ?
+                  AND j.status = 'completed'
+                  AND j.completed_at >= ?
                 """,
                 [current_org_id, cutoff_ts],
             ).rows
@@ -74,13 +87,16 @@ def run(org_id: str | None = None) -> None:
                 client_id: str = job[1]
                 job_number: str = job[2]
                 job_title: str = job[3]
+                first_name: str = job[4] or ""
+                last_name: str = job[5] or ""
+                client_email: str | None = job[6]
 
-                # Check if a review request already exists for this job
+                client_name = f"{first_name} {last_name}".strip() or client_id
+
                 existing = db.execute(
                     """
                     SELECT id FROM review_requests
-                    WHERE job_id = ?
-                      AND org_id = ?
+                    WHERE job_id = ? AND org_id = ?
                     LIMIT 1
                     """,
                     [job_id, current_org_id],
@@ -90,7 +106,6 @@ def run(org_id: str | None = None) -> None:
                     org_skipped += 1
                     continue
 
-                # Create the review request record
                 new_id = __import__("uuid").uuid4().hex
                 now_ts = int(datetime.now(timezone.utc).timestamp())
 
@@ -102,6 +117,41 @@ def run(org_id: str | None = None) -> None:
                     """,
                     [new_id, now_ts, current_org_id, client_id, job_id, "email", "pending"],
                 )
+
+                # Send email if client has an address and email service is ready
+                if client_email and email_svc:
+                    review_url = f"{app_url}/review/{new_id}"
+                    html = review_request_template(
+                        business_name=org_name,
+                        client_name=client_name,
+                        job_title=job_title,
+                        review_url=review_url,
+                    )
+                    ok, detail = email_svc.send(
+                        to_email=client_email,
+                        subject=f"How did we do? — {job_title}",
+                        html_body=html,
+                        cc=cc_email,
+                    )
+                    if ok:
+                        # Update record to 'sent' now that email was delivered
+                        db.execute(
+                            "UPDATE review_requests SET status = 'sent' WHERE id = ?",
+                            [new_id],
+                        )
+                        print(
+                            f"  [SENT] Review request email for job {job_number} "
+                            f"→ {client_email}"
+                        )
+                    else:
+                        print(
+                            f"  [EMAIL ERROR] Job {job_number}: {detail}",
+                            file=sys.stderr,
+                        )
+                elif not client_email:
+                    print(
+                        f"  [SKIP EMAIL] Job {job_number} — client has no email address"
+                    )
 
                 org_created += 1
                 print(

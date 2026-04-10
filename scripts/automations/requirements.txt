@@ -1,2 +1,3 @@
 libsql-experimental
 python-dotenv
+twilio

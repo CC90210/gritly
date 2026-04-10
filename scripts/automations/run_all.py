@@ -17,6 +17,14 @@ from datetime import datetime, timezone
 # Ensure sibling scripts are importable when called from the repo root
 sys.path.insert(0, os.path.dirname(__file__))
 
+from dotenv import load_dotenv
+
+# Load .env.local first, then fall back to automations/.env
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env.local"))
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+
+from email_service import GritlyEmailService
+from sms_service import GritlySMSService
 from review_request import run as run_reviews
 from quote_followup import run as run_followups
 from invoice_reminder import run as run_reminders
@@ -25,11 +33,39 @@ from maintenance_renewal import run as run_renewals
 from daily_digest import run as run_digest
 
 
+def _init_services() -> tuple[GritlyEmailService | None, GritlySMSService]:
+    """
+    Initialise email and SMS services once at startup and report their status.
+    All automations reuse these instances — no per-script SMTP reconnect.
+    """
+    try:
+        email_svc = GritlyEmailService.from_env()
+        print(
+            f"[EMAIL] SMTP configured — "
+            f"{email_svc.smtp_host}:{email_svc.smtp_port} "
+            f"as {email_svc.from_email}"
+        )
+    except EnvironmentError as exc:
+        print(f"[EMAIL] Not configured ({exc}) — emails will be stubbed")
+        email_svc = None
+
+    sms_svc = GritlySMSService.from_env()
+    if sms_svc.enabled:
+        print(f"[SMS] Twilio configured — from {sms_svc._from_number}")
+    else:
+        print("[SMS] Not configured — SMS will be logged only")
+
+    return email_svc, sms_svc
+
+
 def main(org_id: str | None = None) -> None:
     started_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     print(f"\n{'=' * 48}")
     print(f"  GRITLY AUTOMATIONS — {started_at}")
     print(f"{'=' * 48}\n")
+
+    _init_services()
+    print()
 
     steps: list[tuple[str, object]] = [
         ("Review Requests", run_reviews),

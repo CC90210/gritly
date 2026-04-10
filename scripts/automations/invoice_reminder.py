@@ -10,10 +10,7 @@ Queries invoices where:
 For each:
   - Creates a communication record logging the reminder
   - Updates the invoice status to 'overdue' if not already
-
-Prints a summary of overdue invoices with total amount outstanding.
-In production, the communication record would trigger a Twilio SMS or
-SendGrid email via a delivery worker.
+  - Sends an overdue reminder email to the client
 """
 
 import sys
@@ -27,6 +24,9 @@ from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env.local"))
 
+from email_service import GritlyEmailService
+from templates import invoice_overdue_template
+
 
 def get_db() -> libsql.Connection:
     url = os.getenv("TURSO_DATABASE_URL")
@@ -38,10 +38,23 @@ def get_db() -> libsql.Connection:
     return libsql.connect(url, auth_token=token)
 
 
+def _build_email_service() -> GritlyEmailService | None:
+    try:
+        return GritlyEmailService.from_env()
+    except EnvironmentError as exc:
+        print(f"[EMAIL] Not configured — skipping email delivery: {exc}")
+        return None
+
+
 def run(org_id: str | None = None) -> None:
     db = get_db()
+    email_svc = _build_email_service()
 
     today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today_dt = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    app_url = os.getenv("APP_URL", "https://gritly.vercel.app")
+    cc_email = os.getenv("CC_EMAIL") or os.getenv("FROM_EMAIL")
 
     if org_id:
         orgs = db.execute("SELECT id, name FROM organizations WHERE id = ?", [org_id]).rows
@@ -56,14 +69,16 @@ def run(org_id: str | None = None) -> None:
         org_name: str = org[1]
 
         try:
-            # Find invoices that are past due and not yet paid or voided
             overdue_invoices = db.execute(
                 """
-                SELECT id, client_id, invoice_number, total, amount_paid, status, due_date
-                FROM invoices
-                WHERE org_id = ?
-                  AND status NOT IN ('paid', 'void')
-                  AND due_date < ?
+                SELECT i.id, i.client_id, i.invoice_number, i.total,
+                       i.amount_paid, i.status, i.due_date,
+                       c.first_name, c.last_name, c.email
+                FROM invoices i
+                JOIN clients c ON c.id = i.client_id
+                WHERE i.org_id = ?
+                  AND i.status NOT IN ('paid', 'void')
+                  AND i.due_date < ?
                 """,
                 [current_org_id, today_str],
             ).rows
@@ -79,9 +94,23 @@ def run(org_id: str | None = None) -> None:
                 amount_paid: float = inv[4] or 0.0
                 current_status: str = inv[5]
                 due_date: str = inv[6]
+                first_name: str = inv[7] or ""
+                last_name: str = inv[8] or ""
+                client_email: str | None = inv[9]
 
+                client_name = f"{first_name} {last_name}".strip() or client_id
                 balance_due = total - amount_paid
                 org_outstanding += balance_due
+
+                # Calculate days overdue for template urgency
+                days_overdue = 1
+                try:
+                    due_dt = datetime.strptime(due_date, "%Y-%m-%d").replace(
+                        tzinfo=timezone.utc
+                    )
+                    days_overdue = max(1, (today_dt - due_dt).days)
+                except ValueError:
+                    pass
 
                 now_ts = int(datetime.now(timezone.utc).timestamp())
                 body = (
@@ -90,7 +119,7 @@ def run(org_id: str | None = None) -> None:
                     f"Please contact the client to arrange payment."
                 )
 
-                # Create a communication record for the reminder
+                # Log communication record
                 db.execute(
                     """
                     INSERT INTO communications
@@ -102,14 +131,14 @@ def run(org_id: str | None = None) -> None:
                         now_ts,
                         current_org_id,
                         client_id,
-                        "note",
+                        "email",
                         "outbound",
                         f"Overdue Invoice Reminder: {invoice_number}",
                         body,
                     ],
                 )
 
-                # Mark invoice as 'overdue' if it isn't already
+                # Mark invoice as 'overdue' if not already
                 if current_status != "overdue":
                     db.execute(
                         """
@@ -118,6 +147,39 @@ def run(org_id: str | None = None) -> None:
                         WHERE id = ?
                         """,
                         [now_ts, inv_id],
+                    )
+
+                # Send email to client
+                if client_email and email_svc:
+                    pay_url = f"{app_url}/portal/invoices/{inv_id}/pay"
+                    html = invoice_overdue_template(
+                        business_name=org_name,
+                        client_name=client_name,
+                        invoice_number=invoice_number,
+                        balance_due=balance_due,
+                        due_date=due_date,
+                        pay_url=pay_url,
+                        days_overdue=days_overdue,
+                    )
+                    ok, detail = email_svc.send(
+                        to_email=client_email,
+                        subject=f"Payment Overdue — Invoice {invoice_number}",
+                        html_body=html,
+                        cc=cc_email,
+                    )
+                    if ok:
+                        print(
+                            f"  [EMAIL SENT] Overdue reminder for invoice {invoice_number} "
+                            f"→ {client_email}"
+                        )
+                    else:
+                        print(
+                            f"  [EMAIL ERROR] Invoice {invoice_number}: {detail}",
+                            file=sys.stderr,
+                        )
+                elif not client_email:
+                    print(
+                        f"  [SKIP EMAIL] Invoice {invoice_number} — client has no email address"
                     )
 
                 org_count += 1
