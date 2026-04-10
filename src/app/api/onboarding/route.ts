@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    logAudit({ orgId, userId: session.user.id, action: "update", entityType: "onboarding", entityId: orgId, metadata: { step } });
+    await logAudit({ orgId, userId: session.user.id, action: "update", entityType: "onboarding", entityId: orgId, metadata: { step } });
 
     return NextResponse.json({ success: true });
   } catch (err) {
@@ -84,7 +84,7 @@ export async function PUT(request: NextRequest) {
       })
       .where(eq(organizations.id, orgId));
 
-    logAudit({ orgId, userId: session.user.id, action: "update", entityType: "organization", entityId: orgId, metadata: { onboardingCompleted: true, industry } });
+    await logAudit({ orgId, userId: session.user.id, action: "update", entityType: "organization", entityId: orgId, metadata: { onboardingCompleted: true, industry } });
 
     return NextResponse.json({ success: true });
   } catch (err) {

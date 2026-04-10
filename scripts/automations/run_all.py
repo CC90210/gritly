@@ -36,33 +36,35 @@ from daily_digest import run as run_digest
 def _init_services() -> tuple[GritlyEmailService | None, GritlySMSService]:
     """
     Initialise email and SMS services once at startup and report their status.
-    All automations reuse these instances — no per-script SMTP reconnect.
+    Each automation creates its own service instances (via from_env) so this
+    is purely diagnostic output at the top of the run.
     """
     try:
         email_svc = GritlyEmailService.from_env()
         print(
-            f"[EMAIL] SMTP configured — "
+            f"[EMAIL] SMTP configured -- "
             f"{email_svc.smtp_host}:{email_svc.smtp_port} "
             f"as {email_svc.from_email}"
         )
     except EnvironmentError as exc:
-        print(f"[EMAIL] Not configured ({exc}) — emails will be stubbed")
+        print(f"[EMAIL] Not configured ({exc}) -- emails will be stubbed")
         email_svc = None
 
     sms_svc = GritlySMSService.from_env()
     if sms_svc.enabled:
-        print(f"[SMS] Twilio configured — from {sms_svc._from_number}")
+        print(f"[SMS] Twilio configured -- from {sms_svc._from_number}")
     else:
-        print("[SMS] Not configured — SMS will be logged only")
+        print("[SMS] Not configured -- SMS will be logged only")
 
     return email_svc, sms_svc
 
 
 def main(org_id: str | None = None) -> None:
     started_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    print(f"\n{'=' * 48}")
-    print(f"  GRITLY AUTOMATIONS — {started_at}")
-    print(f"{'=' * 48}\n")
+    separator = "=" * 48
+    print(f"\n{separator}")
+    print(f"  GRITLY AUTOMATIONS -- {started_at}")
+    print(f"{separator}\n")
 
     _init_services()
     print()
@@ -76,18 +78,27 @@ def main(org_id: str | None = None) -> None:
         ("Daily Digest", run_digest),
     ]
 
+    failures: list[str] = []
     for label, fn in steps:
         print(f"--- {label} ---")
         try:
             fn(org_id=org_id)
         except Exception as exc:
             print(f"[ERROR] {label} failed: {exc}", file=sys.stderr)
+            failures.append(label)
         print()
 
     finished_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    print(f"{'=' * 48}")
-    print(f"  All automations complete — {finished_at}")
-    print(f"{'=' * 48}\n")
+    print(separator)
+    if failures:
+        print(f"  Automations complete with {len(failures)} failure(s) -- {finished_at}")
+        print(f"  Failed: {', '.join(failures)}")
+    else:
+        print(f"  All automations complete -- {finished_at}")
+    print(f"{separator}\n")
+
+    if failures:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

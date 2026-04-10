@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireRole, isAuthorized } from "@/lib/auth/require-role";
 import { sendEmail, getOwnerCc } from "@/lib/email";
 import {
   quoteTemplate,
@@ -12,9 +13,9 @@ import {
   paymentReceivedTemplate,
 } from "@/lib/email/templates";
 
-// ─────────────────────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // REQUEST SHAPE
-// ─────────────────────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 type NotificationType =
   | "quote_sent"
@@ -32,14 +33,14 @@ interface NotificationRequest {
   type: NotificationType;
   recipientEmail: string;
   recipientPhone?: string;
-  // Template-specific data — typed loosely here; each handler validates what it needs
+  // Template-specific data â typed loosely here; each handler validates what it needs
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- intentionally flexible; handlers narrow the type
   data: Record<string, any>;
 }
 
-// ─────────────────────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // HELPERS
-// ─────────────────────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 const APP_URL = process.env.APP_URL ?? "https://gritly.vercel.app";
 
@@ -51,9 +52,9 @@ function requireFields(
   return missing.length > 0 ? `Missing required fields: ${missing.join(", ")}` : null;
 }
 
-// ─────────────────────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // HANDLER MAP
-// ─────────────────────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 async function handleQuoteSent(
   to: string,
@@ -132,7 +133,7 @@ async function handlePaymentReceived(
 
   await sendEmail({
     to,
-    subject: `Payment Confirmed — Invoice ${data.invoiceNumber}`,
+    subject: `Payment Confirmed â Invoice ${data.invoiceNumber}`,
     html,
     cc: getOwnerCc(),
   });
@@ -162,7 +163,7 @@ async function handleJobScheduled(
 
   await sendEmail({
     to,
-    subject: `Appointment Confirmed — ${data.jobTitle}`,
+    subject: `Appointment Confirmed â ${data.jobTitle}`,
     html,
     cc: getOwnerCc(),
   });
@@ -189,7 +190,7 @@ async function handleJobCompleted(
 
   await sendEmail({
     to,
-    subject: `Work Complete — ${data.jobTitle}`,
+    subject: `Work Complete â ${data.jobTitle}`,
     html,
     cc: getOwnerCc(),
   });
@@ -214,7 +215,7 @@ async function handleReviewRequest(
 
   await sendEmail({
     to,
-    subject: `How did we do? — ${data.jobTitle}`,
+    subject: `How did we do? â ${data.jobTitle}`,
     html,
     cc: getOwnerCc(),
   });
@@ -242,7 +243,7 @@ async function handleBookingConfirmation(
 
   await sendEmail({
     to,
-    subject: `We received your service request — ${data.businessName}`,
+    subject: `We received your service request â ${data.businessName}`,
     html,
     cc: getOwnerCc(),
   });
@@ -297,17 +298,21 @@ async function handleInvoiceOverdue(
 
   await sendEmail({
     to,
-    subject: `Payment Overdue — Invoice ${data.invoiceNumber}`,
+    subject: `Payment Overdue â Invoice ${data.invoiceNumber}`,
     html,
     cc: getOwnerCc(),
   });
 }
 
-// ─────────────────────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // ROUTE HANDLER
-// ─────────────────────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  // Require at least technician role -- notifications are sent by the app on behalf of the org
+  const authResult = await requireRole("technician");
+  if (!isAuthorized(authResult)) return authResult;
+
   let body: NotificationRequest;
 
   try {
@@ -331,10 +336,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         await handleQuoteSent(recipientEmail, data);
         break;
       case "quote_approved":
-        // quote_approved notifies the owner — recipientEmail should be the owner's address
+        // quote_approved notifies the owner â recipientEmail should be the owner's address
         await sendEmail({
           to: recipientEmail,
-          subject: `Quote Approved — ${(data.quoteNumber as string) ?? ""}`,
+          subject: `Quote Approved â ${(data.quoteNumber as string) ?? ""}`,
           html: (await import("@/lib/email/templates")).quoteApprovedTemplate({
             businessName: data.businessName as string,
             clientName: data.clientName as string,

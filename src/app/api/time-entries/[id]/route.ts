@@ -5,6 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
 import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
+import { parseBody } from "@/lib/utils/parse-body";
 
 export async function PATCH(
   req: NextRequest,
@@ -19,13 +20,14 @@ export async function PATCH(
 
   const { id } = await params;
 
-  const body = await req.json() as {
+  const body = await parseBody<{
     clockIn?: string;
     clockOut?: string;
     notes?: string;
     jobId?: string;
     visitId?: string;
-  };
+  }>(req);
+  if (body instanceof NextResponse) return body;
 
   // Get existing entry for duration calculation
   const [existing] = await db
@@ -67,7 +69,7 @@ export async function PATCH(
 
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  logAudit({ orgId, userId, action: "update", entityType: "time_entry", entityId: id, metadata: body });
+  await logAudit({ orgId, userId, action: "update", entityType: "time_entry", entityId: id, metadata: body });
 
   return NextResponse.json(updated);
 }
@@ -92,7 +94,7 @@ export async function DELETE(
 
   if (!deleted) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  logAudit({ orgId, userId, action: "delete", entityType: "time_entry", entityId: id });
+  await logAudit({ orgId, userId, action: "delete", entityType: "time_entry", entityId: id });
 
   return NextResponse.json({ success: true });
 }

@@ -9,6 +9,14 @@ Trade-appropriate copy for field service businesses (HVAC, plumbing, electrical,
 """
 
 from datetime import datetime
+from html import escape as _html_escape
+
+
+def _esc(value: str | None) -> str:
+    """HTML-escape a user-provided string to prevent XSS in email templates."""
+    if value is None:
+        return ""
+    return _html_escape(str(value), quote=True)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -43,7 +51,7 @@ _SECONDARY_BUTTON_STYLE = (
 def _wrap(business_name: str, content: str, footer_note: str = "") -> str:
     """Wrap content in the shared Gritly email shell."""
     footer_text = footer_note or (
-        f"You received this email from {business_name}. "
+        f"You received this email from {_esc(business_name)}. "
         "Reply directly to this email to contact us."
     )
     return f"""<!DOCTYPE html>
@@ -51,7 +59,7 @@ def _wrap(business_name: str, content: str, footer_note: str = "") -> str:
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{business_name}</title>
+  <title>{_esc(business_name)}</title>
 </head>
 <body style="{_BASE_STYLES}">
   <table width="100%" cellpadding="0" cellspacing="0"
@@ -158,7 +166,7 @@ def quote_template(
     if valid_until:
         validity_html = (
             f'<p style="margin: 0 0 16px; font-size: 13px; color: #6b7280;">'
-            f"This quote is valid until <strong>{valid_until}</strong>.</p>"
+            f"This quote is valid until <strong>{_esc(valid_until)}</strong>.</p>"
         )
 
     content = f"""
@@ -232,7 +240,7 @@ def quote_approved_template(
       Quote Approved {_badge("Approved", "#16a34a")}
     </h2>
     <p style="margin: 0 0 24px; font-size: 15px; color: #6b7280;">
-      <strong>{client_name}</strong> approved a quote. Time to schedule the work.
+      <strong>{_esc(client_name)}</strong> approved a quote. Time to schedule the work.
     </p>
 
     <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0;

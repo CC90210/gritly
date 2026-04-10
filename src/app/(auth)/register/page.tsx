@@ -5,6 +5,7 @@ import Link from "next/link";
 import { signUp } from "@/lib/auth/client";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import Logo from "@/components/ui/Logo";
 
 export default function RegisterPage() {
   const [businessName, setBusinessName] = useState("");
@@ -68,6 +69,9 @@ export default function RegisterPage() {
   return (
     <>
       <div className="mb-6">
+        <div className="flex justify-center mb-4">
+          <Logo variant="icon" width={40} height={45} />
+        </div>
         <h1 className="text-xl font-semibold text-white">Start your free trial</h1>
         <p className="text-sm text-[#6b7280] mt-1">No credit card required</p>
       </div>

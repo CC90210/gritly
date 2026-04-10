@@ -3,7 +3,7 @@ export const BRAND = {
   tagline: "Built for grit.",
   description: "The field service platform that replaces Jobber, CompanyCam, and 4 other tools — with unlimited users on every plan.",
   url: "https://grit.ly",
-  email: "hello@grit.ly",
+  email: "gritlyteam@gmail.com",
   parent: "OASIS AI Solutions",
   parentUrl: "https://oasisai.work",
 } as const;

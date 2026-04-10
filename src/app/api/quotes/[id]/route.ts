@@ -87,7 +87,7 @@ export async function PATCH(
 
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  logAudit({ orgId, userId, action: "update", entityType: "quote", entityId: id, metadata: body });
+  await logAudit({ orgId, userId, action: "update", entityType: "quote", entityId: id, metadata: body });
 
   const items = await db
     .select()
@@ -121,7 +121,7 @@ export async function DELETE(
   await db.delete(quoteItems).where(eq(quoteItems.quoteId, id));
   await db.delete(quotes).where(eq(quotes.id, id));
 
-  logAudit({ orgId, userId, action: "delete", entityType: "quote", entityId: id });
+  await logAudit({ orgId, userId, action: "delete", entityType: "quote", entityId: id });
 
   return NextResponse.json({ success: true });
 }

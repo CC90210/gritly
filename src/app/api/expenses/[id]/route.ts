@@ -26,7 +26,7 @@ export async function DELETE(
 
   if (!deleted) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  logAudit({ orgId, userId, action: "delete", entityType: "expense", entityId: id });
+  await logAudit({ orgId, userId, action: "delete", entityType: "expense", entityId: id });
 
   return NextResponse.json({ success: true });
 }

@@ -7,6 +7,22 @@
  * Trade-appropriate copy for field service businesses.
  */
 
+
+// HTML ESCAPING
+
+const HTML_ESCAPE_MAP: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#x27;",
+};
+
+function esc(value: string | number | null | undefined): string {
+  if (value == null) return "";
+  return String(value).replace(/[&<>"']/g, (ch) => HTML_ESCAPE_MAP[ch] ?? ch);
+}
+
 // ─────────────────────────────────────────────────────────────
 // SHARED HELPERS
 // ─────────────────────────────────────────────────────────────
@@ -28,28 +44,28 @@ function divider(): string {
 function badge(text: string, color = "#f97316"): string {
   return `<span style="display:inline-block;padding:3px 10px;` +
     `background-color:${color}20;color:${color};border-radius:999px;` +
-    `font-size:12px;font-weight:600;">${text}</span>`;
+    `font-size:12px;font-weight:600;">${esc(text)}</span>`;
 }
 
 function lineItemRow(description: string, amount: string): string {
   return `<tr>
     <td style="padding:8px 0;font-size:14px;color:#374151;
-      border-bottom:1px solid #f3f4f6;">${description}</td>
+      border-bottom:1px solid #f3f4f6;">${esc(description)}</td>
     <td style="padding:8px 0;font-size:14px;color:#111827;font-weight:500;
-      text-align:right;border-bottom:1px solid #f3f4f6;">${amount}</td>
+      text-align:right;border-bottom:1px solid #f3f4f6;">${esc(amount)}</td>
   </tr>`;
 }
 
 function wrap(businessName: string, content: string, footerNote?: string): string {
   const footer =
     footerNote ??
-    `You received this email from ${businessName}. Reply directly to contact us.`;
+    `You received this email from ${esc(businessName)}. Reply directly to contact us.`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-  <title>${businessName}</title>
+  <title>${esc(businessName)}</title>
 </head>
 <body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background-color:#f3f4f6;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f3f4f6;padding:32px 16px;">
@@ -59,7 +75,7 @@ function wrap(businessName: string, content: string, footerNote?: string): strin
         <!-- HEADER -->
         <tr>
           <td style="background-color:#111827;border-radius:8px 8px 0 0;padding:28px 36px;">
-            <span style="color:#f97316;font-size:20px;font-weight:700;letter-spacing:-0.02em;">${businessName}</span>
+            <span style="color:#f97316;font-size:20px;font-weight:700;letter-spacing:-0.02em;">${esc(businessName)}</span>
           </td>
         </tr>
 
@@ -215,7 +231,7 @@ export function quoteTemplate(p: QuoteTemplateParams): string {
 
   const validityHtml = p.validUntil
     ? `<p style="margin:0 0 16px;font-size:13px;color:#6b7280;">
-        This quote is valid until <strong>${p.validUntil}</strong>.
+        This quote is valid until <strong>${esc(p.validUntil)}</strong>.
        </p>`
     : "";
 
@@ -224,11 +240,11 @@ export function quoteTemplate(p: QuoteTemplateParams): string {
       Your Quote is Ready
     </h2>
     <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
-      Hi ${p.clientName} — we've prepared a quote for you. Review the details below and approve when you're ready.
+      Hi ${esc(p.clientName)} — we've prepared a quote for you. Review the details below and approve when you're ready.
     </p>
     <div style="background-color:#f9fafb;border-radius:8px;padding:20px 24px;margin-bottom:24px;">
       <p style="margin:0 0 4px;font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.05em;">Quote Reference</p>
-      <p style="margin:0;font-size:18px;font-weight:700;color:#111827;">${p.quoteNumber}</p>
+      <p style="margin:0;font-size:18px;font-weight:700;color:#111827;">${esc(p.quoteNumber)}</p>
     </div>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;">${itemRows}</table>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
@@ -257,7 +273,7 @@ export function quoteApprovedTemplate(p: QuoteApprovedTemplateParams): string {
       Quote Approved ${badge("Approved", "#16a34a")}
     </h2>
     <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
-      <strong>${p.clientName}</strong> approved a quote. Time to schedule the work.
+      <strong>${esc(p.clientName)}</strong> approved a quote. Time to schedule the work.
     </p>
     <div style="background-color:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:20px 24px;margin-bottom:24px;">
       <table width="100%" cellpadding="0" cellspacing="0">
@@ -279,7 +295,7 @@ export function quoteApprovedTemplate(p: QuoteApprovedTemplateParams): string {
   return wrap(
     p.businessName,
     content,
-    `Internal notification for ${p.businessName}. Automated by Gritly.`,
+    `Internal notification for ${esc(p.businessName)}. Automated by Gritly.`,
   );
 }
 
@@ -308,7 +324,7 @@ export function invoiceTemplate(p: InvoiceTemplateParams): string {
   const content = `
     <h2 style="margin:0 0 6px;font-size:22px;font-weight:700;color:#111827;">Invoice ${p.invoiceNumber}</h2>
     <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
-      Hi ${p.clientName} — thank you for choosing ${p.businessName}. Your invoice is ready below.
+      Hi ${esc(p.clientName)} — thank you for choosing ${esc(p.businessName)}. Your invoice is ready below.
     </p>
     <div style="background-color:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
       <p style="margin:0;font-size:13px;color:#9a3412;font-weight:500;">
@@ -342,7 +358,7 @@ export function paymentReceivedTemplate(p: PaymentReceivedTemplateParams): strin
       Payment Received ${badge("Paid", "#16a34a")}
     </h2>
     <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
-      Hi ${p.clientName} — we've received your payment. Thank you!
+      Hi ${esc(p.clientName)} — we've received your payment. Thank you!
     </p>
     <div style="background-color:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:20px 24px;margin-bottom:24px;">
       <table width="100%" cellpadding="0" cellspacing="0">
@@ -378,11 +394,11 @@ export function jobScheduledTemplate(p: JobScheduledTemplateParams): string {
   const content = `
     <h2 style="margin:0 0 6px;font-size:22px;font-weight:700;color:#111827;">Service Appointment Confirmed</h2>
     <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
-      Hi ${p.clientName} — your appointment is confirmed. Here are the details:
+      Hi ${esc(p.clientName)} — your appointment is confirmed. Here are the details:
     </p>
     <div style="background-color:#f9fafb;border-left:4px solid #f97316;border-radius:0 8px 8px 0;padding:20px 24px;margin-bottom:24px;">
-      <p style="margin:0 0 6px;font-size:16px;font-weight:700;color:#111827;">${p.jobTitle}</p>
-      <p style="margin:0;font-size:13px;color:#9ca3af;">Reference: ${p.jobNumber}</p>
+      <p style="margin:0 0 6px;font-size:16px;font-weight:700;color:#111827;">${esc(p.jobTitle)}</p>
+      <p style="margin:0;font-size:13px;color:#9ca3af;">Reference: ${esc(p.jobNumber)}</p>
     </div>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
       ${lineItemRow("Date &amp; Time", p.scheduledStart)}
@@ -405,7 +421,7 @@ export function jobCompletedTemplate(p: JobCompletedTemplateParams): string {
   const nextHtml = p.nextSteps
     ? `<div style="background-color:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
         <p style="margin:0 0 4px;font-size:12px;color:#9a3412;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">Next Steps</p>
-        <p style="margin:0;font-size:14px;color:#374151;">${p.nextSteps}</p>
+        <p style="margin:0;font-size:14px;color:#374151;">${esc(p.nextSteps)}</p>
        </div>`
     : "";
 
@@ -414,11 +430,11 @@ export function jobCompletedTemplate(p: JobCompletedTemplateParams): string {
       Work Completed ${badge("Done", "#16a34a")}
     </h2>
     <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
-      Hi ${p.clientName} — the job has been completed. Thank you for trusting ${p.businessName} with your service.
+      Hi ${esc(p.clientName)} — the job has been completed. Thank you for trusting ${esc(p.businessName)} with your service.
     </p>
     <div style="background-color:#f9fafb;border-radius:8px;padding:20px 24px;margin-bottom:24px;">
-      <p style="margin:0 0 4px;font-size:14px;font-weight:600;color:#111827;">${p.jobTitle}</p>
-      <p style="margin:0;font-size:13px;color:#9ca3af;">${p.jobNumber} &middot; Completed ${p.completedAt}</p>
+      <p style="margin:0 0 4px;font-size:14px;font-weight:600;color:#111827;">${esc(p.jobTitle)}</p>
+      <p style="margin:0;font-size:13px;color:#9ca3af;">${esc(p.jobNumber)} &middot; Completed ${esc(p.completedAt)}</p>
     </div>
     ${nextHtml}
     <p style="margin:0;font-size:14px;color:#374151;">
@@ -436,7 +452,7 @@ export function reviewRequestTemplate(p: ReviewRequestTemplateParams): string {
   const content = `
     <h2 style="margin:0 0 6px;font-size:22px;font-weight:700;color:#111827;">How Did We Do?</h2>
     <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
-      Hi ${p.clientName} — we recently completed <strong>${p.jobTitle}</strong> for you.
+      Hi ${esc(p.clientName)} — we recently completed <strong>${esc(p.jobTitle)}</strong> for you.
       Your feedback means everything to us and helps other homeowners find trusted service providers in the area.
     </p>
     <div style="text-align:center;margin-bottom:28px;">
@@ -465,7 +481,7 @@ export function bookingConfirmationTemplate(p: BookingConfirmationTemplateParams
   const content = `
     <h2 style="margin:0 0 6px;font-size:22px;font-weight:700;color:#111827;">Request Received</h2>
     <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
-      Hi ${p.clientName} — thanks for reaching out to ${p.businessName}.
+      Hi ${esc(p.clientName)} — thanks for reaching out to ${esc(p.businessName)}.
       We've received your service request and will follow up shortly to confirm your appointment.
     </p>
     <div style="background-color:#f9fafb;border-radius:8px;padding:20px 24px;margin-bottom:24px;">
@@ -498,7 +514,7 @@ export function quoteFollowUpTemplate(p: QuoteFollowUpTemplateParams): string {
   const content = `
     <h2 style="margin:0 0 6px;font-size:22px;font-weight:700;color:#111827;">Following Up on Your Quote</h2>
     <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
-      Hi ${p.clientName} — we sent you a quote ${dayLabel} ago and wanted to check in.
+      Hi ${esc(p.clientName)} — we sent you a quote ${dayLabel} ago and wanted to check in.
       We'd love to get started on your project whenever you're ready.
     </p>
     <div style="background-color:#f9fafb;border-radius:8px;padding:20px 24px;margin-bottom:24px;">
@@ -537,7 +553,7 @@ export function invoiceOverdueTemplate(p: InvoiceOverdueTemplateParams): string 
       Invoice Overdue ${badge(urgencyLabel, urgencyColor)}
     </h2>
     <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
-      Hi ${p.clientName} — invoice ${p.invoiceNumber} was due on <strong>${p.dueDate}</strong>
+      Hi ${esc(p.clientName)} — invoice ${p.invoiceNumber} was due on <strong>${p.dueDate}</strong>
       and still shows a balance. Please arrange payment at your earliest convenience.
     </p>
     <div style="background-color:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:20px 24px;margin-bottom:24px;">
@@ -582,7 +598,7 @@ export function dailyDigestTemplate(p: DailyDigestTemplateParams): string {
 
   const content = `
     <h2 style="margin:0 0 6px;font-size:22px;font-weight:700;color:#111827;">Daily Business Digest</h2>
-    <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">${p.businessName} &middot; ${p.dateStr}</p>
+    <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">${esc(p.businessName)} &middot; ${esc(p.dateStr)}</p>
 
     <div style="background-color:#f9fafb;border-radius:8px;overflow:hidden;margin-bottom:24px;border:1px solid #e5e7eb;">
       <table width="100%" cellpadding="0" cellspacing="0">
@@ -618,6 +634,6 @@ export function dailyDigestTemplate(p: DailyDigestTemplateParams): string {
   return wrap(
     p.businessName,
     content,
-    `Daily digest for ${p.businessName}. Automated by Gritly — sent each morning.`,
+    `Daily digest for ${esc(p.businessName)}. Automated by Gritly — sent each morning.`,
   );
 }

@@ -5,6 +5,7 @@ import { eq, desc } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
 import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
+import { parseBody } from "@/lib/utils/parse-body";
 
 export async function GET(_req: NextRequest) {
   const authResult = await requireRole("technician");
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
   const limited = rateLimit(`session:${userId}`, 60, 60_000);
   if (limited) return limited;
 
-  const body = await req.json() as {
+  const body = await parseBody<{
     name?: string;
     description?: string;
     defaultPrice?: number;
@@ -39,7 +40,8 @@ export async function POST(req: NextRequest) {
     category?: string;
     isActive?: boolean;
     sortOrder?: number;
-  };
+  }>(req);
+  if (body instanceof NextResponse) return body;
 
   if (!body.name) {
     return NextResponse.json({ error: "name is required" }, { status: 422 });
@@ -59,7 +61,7 @@ export async function POST(req: NextRequest) {
     })
     .returning();
 
-  logAudit({ orgId, userId, action: "create", entityType: "service_item", entityId: row.id });
+  await logAudit({ orgId, userId, action: "create", entityType: "service_item", entityId: row.id });
 
   return NextResponse.json(row, { status: 201 });
 }

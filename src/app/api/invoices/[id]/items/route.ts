@@ -5,6 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
 import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
+import { parseBody } from "@/lib/utils/parse-body";
 
 /** Recalculate invoice totals from items */
 async function recalcInvoiceTotals(invoiceId: string) {
@@ -80,12 +81,13 @@ export async function POST(
     .limit(1);
   if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
 
-  const body = await req.json() as {
+  const body = await parseBody<{
     description?: string;
     quantity?: number;
     unitPrice?: number;
     sortOrder?: number;
-  };
+  }>(req);
+  if (body instanceof NextResponse) return body;
 
   if (!body.description || body.unitPrice === undefined) {
     return NextResponse.json(
@@ -111,7 +113,7 @@ export async function POST(
 
   await recalcInvoiceTotals(id);
 
-  logAudit({ orgId, userId, action: "create", entityType: "invoice_item", entityId: item.id, metadata: { invoiceId: id } });
+  await logAudit({ orgId, userId, action: "create", entityType: "invoice_item", entityId: item.id, metadata: { invoiceId: id } });
 
   return NextResponse.json(item, { status: 201 });
 }
@@ -136,13 +138,14 @@ export async function PATCH(
     .limit(1);
   if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
 
-  const body = await req.json() as {
+  const body = await parseBody<{
     itemId: string;
     description?: string;
     quantity?: number;
     unitPrice?: number;
     sortOrder?: number;
-  };
+  }>(req);
+  if (body instanceof NextResponse) return body;
 
   if (!body.itemId) {
     return NextResponse.json({ error: "itemId is required" }, { status: 422 });
@@ -175,7 +178,7 @@ export async function PATCH(
 
   await recalcInvoiceTotals(invoiceId);
 
-  logAudit({ orgId, userId, action: "update", entityType: "invoice_item", entityId: body.itemId, metadata: { invoiceId } });
+  await logAudit({ orgId, userId, action: "update", entityType: "invoice_item", entityId: body.itemId, metadata: { invoiceId } });
 
   return NextResponse.json(updated);
 }
@@ -215,7 +218,7 @@ export async function DELETE(
 
   await recalcInvoiceTotals(invoiceId);
 
-  logAudit({ orgId, userId, action: "delete", entityType: "invoice_item", entityId: itemId, metadata: { invoiceId } });
+  await logAudit({ orgId, userId, action: "delete", entityType: "invoice_item", entityId: itemId, metadata: { invoiceId } });
 
   return NextResponse.json({ success: true });
 }

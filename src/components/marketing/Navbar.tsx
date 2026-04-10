@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import Logo from "@/components/ui/Logo";
 
 const NAV_LINKS = [
   { label: "Features", href: "/features" },
@@ -43,11 +44,8 @@ export default function Navbar() {
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
-            <Link href="/" className="flex items-center gap-1 group">
-              <span className="text-xl font-black tracking-tight text-white group-hover:text-white/90 transition-colors">
-                Gritly
-              </span>
-              <span className="w-1.5 h-1.5 rounded-full bg-orange-500 mb-3 group-hover:scale-125 transition-transform" />
+            <Link href="/" className="flex items-center group" aria-label="Gritly home">
+              <Logo variant="full" width={108} height={32} className="transition-opacity group-hover:opacity-90" />
             </Link>
 
             {/* Desktop nav */}

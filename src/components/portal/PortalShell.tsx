@@ -9,6 +9,7 @@ import {
   LayoutDashboard, FileText, Briefcase, Receipt,
   Inbox, LogOut, Menu, X, ChevronDown,
 } from "lucide-react";
+import Logo from "@/components/ui/Logo";
 
 interface NavItem {
   label: string;
@@ -89,9 +90,7 @@ export default function PortalShell({ orgName, user, clientName, children }: Por
       {/* Logo */}
       <div className="px-4 py-4 border-b border-[#1f2937]">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-orange-500 rounded-lg flex items-center justify-center shrink-0">
-            <span className="text-white font-bold text-xs">G</span>
-          </div>
+          <Logo variant="icon" width={28} height={32} className="shrink-0" />
           <div className="min-w-0">
             <p className="text-white font-semibold text-sm leading-none">Gritly</p>
             <p className="text-[#4b5563] text-xs mt-0.5 truncate max-w-[140px]">{orgName}</p>

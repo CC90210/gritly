@@ -14,6 +14,7 @@ Skips jobs that already have a pending/sent review request.
 import sys
 import os
 import argparse
+import uuid
 from datetime import datetime, timedelta, timezone
 
 import libsql_experimental as libsql
@@ -106,7 +107,7 @@ def run(org_id: str | None = None) -> None:
                     org_skipped += 1
                     continue
 
-                new_id = __import__("uuid").uuid4().hex
+                new_id = uuid.uuid4().hex
                 now_ts = int(datetime.now(timezone.utc).timestamp())
 
                 db.execute(

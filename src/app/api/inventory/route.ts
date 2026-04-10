@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
     })
     .returning();
 
-  logAudit({ orgId, userId, action: "create", entityType: "inventory_item", entityId: row.id });
+  await logAudit({ orgId, userId, action: "create", entityType: "inventory_item", entityId: row.id });
 
   return NextResponse.json(row, { status: 201 });
 }
@@ -113,7 +113,7 @@ export async function PATCH(req: NextRequest) {
 
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  logAudit({ orgId, userId, action: "update", entityType: "inventory_item", entityId: body.id });
+  await logAudit({ orgId, userId, action: "update", entityType: "inventory_item", entityId: body.id });
 
   return NextResponse.json(updated);
 }
@@ -140,7 +140,7 @@ export async function DELETE(req: NextRequest) {
 
   await db.delete(inventoryItems).where(eq(inventoryItems.id, id));
 
-  logAudit({ orgId, userId, action: "delete", entityType: "inventory_item", entityId: id });
+  await logAudit({ orgId, userId, action: "delete", entityType: "inventory_item", entityId: id });
 
   return NextResponse.json({ success: true });
 }

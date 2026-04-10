@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BRAND } from "@/lib/constants/brand";
+import Logo from "@/components/ui/Logo";
 
 const FOOTER_LINKS = {
   Product: [
@@ -30,11 +31,8 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-5 gap-12 lg:gap-8">
           {/* Brand column */}
           <div className="md:col-span-2">
-            <Link href="/" className="flex items-center gap-1 group w-fit">
-              <span className="text-xl font-black tracking-tight text-white">
-                Gritly
-              </span>
-              <span className="w-1.5 h-1.5 rounded-full bg-orange-500 mb-3 group-hover:scale-125 transition-transform" />
+            <Link href="/" className="inline-flex items-center group w-fit" aria-label="Gritly home">
+              <Logo variant="full" width={108} height={32} className="transition-opacity group-hover:opacity-80" />
             </Link>
             <p className="mt-4 text-sm text-zinc-500 max-w-xs leading-relaxed">
               {BRAND.description}

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Logo from "@/components/ui/Logo";
 
 export const metadata: Metadata = {
   title: "Gritly — Sign In",
@@ -29,13 +30,8 @@ export default function AuthLayout({
       <div className="relative w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-2">
-            <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">G</span>
-            </div>
-            <span className="text-white font-semibold text-xl tracking-tight">
-              Gritly
-            </span>
+          <Link href="/" className="inline-flex items-center justify-center" aria-label="Gritly home">
+            <Logo variant="full" width={120} height={36} />
           </Link>
         </div>
 

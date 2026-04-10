@@ -13,6 +13,10 @@ import os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
+# Default SMTP timeout in seconds — prevents scripts from hanging indefinitely
+# when the mail server is unreachable.
+_SMTP_TIMEOUT = 30
+
 
 class GritlyEmailService:
     def __init__(
@@ -96,7 +100,7 @@ class GritlyEmailService:
             recipients.append(cc)
 
         try:
-            with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
+            with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=_SMTP_TIMEOUT) as server:
                 server.ehlo()
                 server.starttls()
                 server.ehlo()
@@ -107,5 +111,11 @@ class GritlyEmailService:
             return False, f"SMTP auth failed — check App Password: {exc}"
         except smtplib.SMTPRecipientsRefused as exc:
             return False, f"Recipient refused: {exc}"
+        except smtplib.SMTPConnectError as exc:
+            return False, f"SMTP connection failed: {exc}"
+        except TimeoutError:
+            return False, f"SMTP connection timed out after {_SMTP_TIMEOUT}s"
+        except OSError as exc:
+            return False, f"Network error: {exc}"
         except Exception as exc:
             return False, str(exc)

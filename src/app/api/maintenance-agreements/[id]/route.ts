@@ -5,6 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
 import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
+import { parseBody } from "@/lib/utils/parse-body";
 
 export async function GET(
   _req: NextRequest,
@@ -42,7 +43,7 @@ export async function PATCH(
 
   const { id } = await params;
 
-  const body = await req.json() as {
+  const body = await parseBody<{
     name?: string;
     frequency?: string;
     price?: number;
@@ -50,7 +51,8 @@ export async function PATCH(
     endDate?: string;
     isActive?: boolean;
     notes?: string;
-  };
+  }>(req);
+  if (body instanceof NextResponse) return body;
 
   const allowed = {
     ...(body.name !== undefined && { name: body.name }),
@@ -70,7 +72,7 @@ export async function PATCH(
 
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  logAudit({ orgId, userId, action: "update", entityType: "maintenance_agreement", entityId: id, metadata: body });
+  await logAudit({ orgId, userId, action: "update", entityType: "maintenance_agreement", entityId: id, metadata: body });
 
   return NextResponse.json(updated);
 }
@@ -95,7 +97,7 @@ export async function DELETE(
 
   if (!deleted) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  logAudit({ orgId, userId, action: "delete", entityType: "maintenance_agreement", entityId: id });
+  await logAudit({ orgId, userId, action: "delete", entityType: "maintenance_agreement", entityId: id });
 
   return NextResponse.json({ success: true });
 }

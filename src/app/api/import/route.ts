@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
       skipped += validRows.length - imported;
     }
 
-    logAudit({ orgId, userId, action: "create", entityType: "client", entityId: "bulk-import", metadata: { imported, skipped } });
+    await logAudit({ orgId, userId, action: "create", entityType: "client", entityId: "bulk-import", metadata: { imported, skipped } });
 
     return NextResponse.json({ imported, skipped, errors });
   } catch (err) {

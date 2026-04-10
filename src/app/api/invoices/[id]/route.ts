@@ -137,7 +137,7 @@ export async function PATCH(
       })
       .where(eq(invoices.id, id));
 
-    logAudit({ orgId, userId, action: "create", entityType: "payment", entityId: paymentRow.id, metadata: { invoiceId: id, amount } });
+    await logAudit({ orgId, userId, action: "create", entityType: "payment", entityId: paymentRow.id, metadata: { invoiceId: id, amount } });
 
     // Payment handler sets final status — do not let the rest of the body override it
     const { payment: _payment, status: _status, ...nonPaymentRest } = body;
@@ -154,7 +154,7 @@ export async function PATCH(
         .where(and(eq(invoices.id, id), eq(invoices.orgId, orgId)));
     }
 
-    logAudit({ orgId, userId, action: "update", entityType: "invoice", entityId: id, metadata: nonPaymentRest });
+    await logAudit({ orgId, userId, action: "update", entityType: "invoice", entityId: id, metadata: nonPaymentRest });
 
     const [updated] = await db
       .select()
@@ -190,7 +190,7 @@ export async function PATCH(
       .where(and(eq(invoices.id, id), eq(invoices.orgId, orgId)));
   }
 
-  logAudit({ orgId, userId, action: "update", entityType: "invoice", entityId: id, metadata: rest });
+  await logAudit({ orgId, userId, action: "update", entityType: "invoice", entityId: id, metadata: rest });
 
   const [updated] = await db
     .select()

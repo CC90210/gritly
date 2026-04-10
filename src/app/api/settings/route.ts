@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
 import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
+import { parseBody } from "@/lib/utils/parse-body";
 
 export async function GET() {
   const authResult = await requireRole("technician");
@@ -33,10 +34,11 @@ export async function PATCH(req: NextRequest) {
   const limited = rateLimit(`session:${userId}`, 60, 60_000);
   if (limited) return limited;
 
-  const body = await req.json() as {
+  const body = await parseBody<{
     name?: string;
     settings?: Record<string, unknown>;
-  };
+  }>(req);
+  if (body instanceof NextResponse) return body;
 
   const [existing] = await db
     .select({ name: organizations.name, settings: organizations.settings })
@@ -72,7 +74,7 @@ export async function PATCH(req: NextRequest) {
     .where(eq(organizations.id, orgId))
     .returning({ name: organizations.name, settings: organizations.settings });
 
-  logAudit({ orgId, userId, action: "update", entityType: "organization", entityId: orgId, metadata: body });
+  await logAudit({ orgId, userId, action: "update", entityType: "organization", entityId: orgId, metadata: body });
 
   return NextResponse.json({ name: updated.name, settings: updated.settings ?? {} });
 }

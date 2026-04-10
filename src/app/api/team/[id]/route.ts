@@ -4,6 +4,7 @@ import { teamMembers, timeEntries, expenses } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
 import { logAudit } from "@/lib/audit";
+import { parseBody } from "@/lib/utils/parse-body";
 
 export async function PATCH(
   req: NextRequest,
@@ -15,7 +16,7 @@ export async function PATCH(
 
   const { id } = await params;
 
-  const body = await req.json() as {
+  const body = await parseBody<{
     firstName?: string;
     lastName?: string;
     email?: string;
@@ -24,7 +25,8 @@ export async function PATCH(
     hourlyRate?: number;
     color?: string;
     isActive?: boolean;
-  };
+  }>(req);
+  if (body instanceof NextResponse) return body;
 
   const allowed = {
     ...(body.firstName !== undefined && { firstName: body.firstName }),

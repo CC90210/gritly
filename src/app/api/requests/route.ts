@@ -5,6 +5,7 @@ import { eq, desc } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
 import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
+import { parseBody } from "@/lib/utils/parse-body";
 
 const sanitize = (s: string, max = 500) => s.trim().slice(0, max);
 
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
   const limited = rateLimit(`ip:requests:${ip}`, 5, 60_000);
   if (limited) return limited;
 
-  const body = await req.json() as {
+  const body = await parseBody<{
     orgId?: string;
     firstName?: string;
     lastName?: string;
@@ -46,7 +47,8 @@ export async function POST(req: NextRequest) {
     preferredTime?: string;
     source?: string;
     notes?: string;
-  };
+  }>(req);
+  if (body instanceof NextResponse) return body;
 
   if (!body.orgId) {
     return NextResponse.json({ error: "orgId is required" }, { status: 422 });

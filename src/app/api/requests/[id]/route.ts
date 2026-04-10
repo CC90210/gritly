@@ -76,7 +76,7 @@ export async function PATCH(
       .returning();
 
     convertedClientId = newClient.id;
-    logAudit({ orgId, userId, action: "create", entityType: "client", entityId: newClient.id, metadata: { convertedFromRequest: id } });
+    await logAudit({ orgId, userId, action: "create", entityType: "client", entityId: newClient.id, metadata: { convertedFromRequest: id } });
   }
 
   const updateData: Record<string, unknown> = {
@@ -96,7 +96,7 @@ export async function PATCH(
     .where(and(eq(serviceRequests.id, id), eq(serviceRequests.orgId, orgId)))
     .returning();
 
-  logAudit({ orgId, userId, action: "update", entityType: "service_request", entityId: id, metadata: body });
+  await logAudit({ orgId, userId, action: "update", entityType: "service_request", entityId: id, metadata: body });
 
   return NextResponse.json({
     ...updated,

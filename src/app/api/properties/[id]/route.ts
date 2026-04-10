@@ -4,6 +4,7 @@ import { properties, quotes, jobs } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
 import { logAudit } from "@/lib/audit";
+import { parseBody } from "@/lib/utils/parse-body";
 
 export async function GET(
   _req: NextRequest,
@@ -35,7 +36,7 @@ export async function PATCH(
 
   const { id } = await params;
 
-  const body = await req.json() as {
+  const body = await parseBody<{
     addressLine1?: string;
     addressLine2?: string;
     city?: string;
@@ -45,7 +46,8 @@ export async function PATCH(
     lat?: number;
     lng?: number;
     isPrimary?: boolean;
-  };
+  }>(req);
+  if (body instanceof NextResponse) return body;
 
   const allowed = {
     ...(body.addressLine1 !== undefined && { addressLine1: body.addressLine1 }),

@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
     })
     .returning();
 
-  logAudit({ orgId, userId, action: "create", entityType: "client", entityId: row.id });
+  await logAudit({ orgId, userId, action: "create", entityType: "client", entityId: row.id });
 
   return NextResponse.json(row, { status: 201 });
 }

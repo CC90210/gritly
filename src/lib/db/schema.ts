@@ -300,6 +300,7 @@ export const invoices = sqliteTable("invoices", {
   index("invoices_client_id_idx").on(t.clientId),
   index("invoices_status_idx").on(t.status),
   index("invoices_job_id_idx").on(t.jobId),
+  index("invoices_due_date_idx").on(t.dueDate),
 ]);
 
 export const invoiceItems = sqliteTable("invoice_items", {
@@ -347,6 +348,7 @@ export const timeEntries = sqliteTable("time_entries", {
 }, (t) => [
   index("time_entries_org_id_idx").on(t.orgId),
   index("time_entries_job_id_idx").on(t.jobId),
+  index("time_entries_team_member_id_idx").on(t.teamMemberId),
 ]);
 
 // ============================================================
@@ -396,6 +398,7 @@ export const serviceRequests = sqliteTable("service_requests", {
 }, (t) => [
   index("service_requests_org_id_idx").on(t.orgId),
   index("service_requests_status_idx").on(t.status),
+  index("service_requests_email_idx").on(t.email),
 ]);
 
 // ============================================================
@@ -471,6 +474,7 @@ export const reviewRequests = sqliteTable("review_requests", {
   reviewUrl: text("review_url"),
 }, (t) => [
   index("review_requests_org_id_idx").on(t.orgId),
+  index("review_requests_job_id_idx").on(t.jobId),
 ]);
 
 // ============================================================
