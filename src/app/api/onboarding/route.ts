@@ -20,6 +20,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { step, data } = body;
 
+    if (!Number.isInteger(step) || step < 1 || step > 5) {
+      return NextResponse.json({ error: "step must be an integer between 1 and 5" }, { status: 422 });
+    }
+
     const userRows = await db.select({ orgId: users.orgId }).from(users).where(eq(users.id, session.user.id)).limit(1);
     const orgId = userRows[0]?.orgId;
     if (!orgId) {

@@ -20,11 +20,11 @@ export async function GET() {
   const user = userRows[0];
   if (!user?.orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
 
-  // Find client record for this portal user
+  // Find client record for this portal user (scoped to org to prevent cross-tenant leak)
   const clientRows = await db
     .select({ id: clients.id })
     .from(clients)
-    .where(eq(clients.userId, session.user.id))
+    .where(and(eq(clients.userId, session.user.id), eq(clients.orgId, user.orgId)))
     .limit(1);
 
   let clientId = clientRows[0]?.id;

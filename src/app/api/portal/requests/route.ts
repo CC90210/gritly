@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { users, clients, serviceRequests, organizations } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
+import { parseBody } from "@/lib/utils/parse-body";
 
 const sanitize = (s: string, max = 500) => s.trim().slice(0, max);
 
@@ -11,7 +12,7 @@ async function resolveClient(userId: string, orgId: string, email: string | null
   const byUser = await db
     .select({ id: clients.id })
     .from(clients)
-    .where(eq(clients.userId, userId))
+    .where(and(eq(clients.userId, userId), eq(clients.orgId, orgId)))
     .limit(1);
   if (byUser[0]) return byUser[0].id;
 
@@ -53,6 +54,11 @@ export async function GET() {
 
   const clientEmail = clientRecord[0]?.email ?? user.email;
 
+  // Require a resolved email — prevent tautological fallback that returns all org requests
+  if (!clientEmail) {
+    return NextResponse.json({ error: "Client email could not be resolved" }, { status: 422 });
+  }
+
   // Requests submitted from portal (source: "portal") or matching email
   const rows = await db
     .select()
@@ -60,7 +66,7 @@ export async function GET() {
     .where(
       and(
         eq(serviceRequests.orgId, user.orgId),
-        clientEmail ? eq(serviceRequests.email, clientEmail) : eq(serviceRequests.orgId, user.orgId)
+        eq(serviceRequests.email, clientEmail)
       )
     )
     .orderBy(desc(serviceRequests.createdAt));
@@ -91,14 +97,15 @@ export async function POST(req: NextRequest) {
     .limit(1);
   if (!orgRows[0]) return NextResponse.json({ error: "Org not found" }, { status: 404 });
 
-  const body = await req.json() as {
+  const body = await parseBody<{
     serviceType?: string;
     description?: string;
     address?: string;
     preferredDate?: string;
     preferredTime?: string;
     notes?: string;
-  };
+  }>(req);
+  if (body instanceof NextResponse) return body;
 
   if (!body.serviceType || !body.description) {
     return NextResponse.json(

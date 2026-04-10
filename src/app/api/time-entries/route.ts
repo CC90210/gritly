@@ -5,6 +5,7 @@ import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
 import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
+import { parseBody } from "@/lib/utils/parse-body";
 
 export async function GET(req: NextRequest) {
   const authResult = await requireRole("technician");
@@ -57,20 +58,25 @@ export async function POST(req: NextRequest) {
   const limited = rateLimit(`session:${userId}`, 60, 60_000);
   if (limited) return limited;
 
-  const body = await req.json() as {
+  const body = await parseBody<{
     teamMemberId?: string;
     jobId?: string;
     visitId?: string;
     clockIn?: string;
     clockOut?: string;
     notes?: string;
-  };
+  }>(req);
+  if (body instanceof NextResponse) return body;
 
   if (!body.teamMemberId || !body.clockIn) {
     return NextResponse.json(
       { error: "teamMemberId and clockIn are required" },
       { status: 422 }
     );
+  }
+
+  if (isNaN(Date.parse(body.clockIn))) {
+    return NextResponse.json({ error: "clockIn must be a valid ISO date string" }, { status: 422 });
   }
 
   // Verify team member belongs to org
@@ -122,7 +128,8 @@ export async function PATCH(req: NextRequest) {
   const limited = rateLimit(`session:${userId}`, 60, 60_000);
   if (limited) return limited;
 
-  const body = await req.json() as { id?: string; clockOut?: string; notes?: string };
+  const body = await parseBody<{ id?: string; clockOut?: string; notes?: string }>(req);
+  if (body instanceof NextResponse) return body;
   if (!body.id) return NextResponse.json({ error: "id is required" }, { status: 422 });
 
   const [existing] = await db

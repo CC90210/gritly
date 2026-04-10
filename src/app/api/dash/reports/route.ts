@@ -85,7 +85,7 @@ export async function GET() {
 
       // Top 5 clients by total revenue paid
       db.select({
-        clientId: payments.orgId, // placeholder — we join via invoices
+        clientId: clients.id,
         firstName: clients.firstName,
         lastName: clients.lastName,
         total: sql<number>`coalesce(sum(${payments.amount}), 0)`,

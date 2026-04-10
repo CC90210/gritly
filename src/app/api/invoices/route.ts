@@ -5,6 +5,7 @@ import { eq, desc, sql, and } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
 import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
+import { parseBody } from "@/lib/utils/parse-body";
 
 export async function GET(req: NextRequest) {
   const authResult = await requireRole("technician");
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
   const limited = rateLimit(`session:${userId}`, 60, 60_000);
   if (limited) return limited;
 
-  const body = await req.json() as {
+  const body = await parseBody<{
     clientId?: string;
     jobId?: string;
     quoteId?: string;
@@ -51,7 +52,8 @@ export async function POST(req: NextRequest) {
       unitPrice: number;
       sortOrder?: number;
     }[];
-  };
+  }>(req);
+  if (body instanceof NextResponse) return body;
 
   if (!body.clientId || !body.dueDate) {
     return NextResponse.json(
@@ -97,7 +99,8 @@ export async function POST(req: NextRequest) {
     .where(eq(organizations.id, orgId))
     .returning({ invoiceCounter: organizations.invoiceCounter });
 
-  const invoiceNumber = `INV-${String(org.invoiceCounter).padStart(5, "0")}`;
+  const counter = org?.invoiceCounter ?? 1000;
+  const invoiceNumber = `INV-${String(counter).padStart(5, "0")}`;
 
   const items = body.items ?? [];
   const taxRate = body.taxRate ?? 0.13;

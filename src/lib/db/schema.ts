@@ -15,9 +15,9 @@ export const organizations = sqliteTable("organizations", {
   onboardingCompleted: integer("onboarding_completed", { mode: "boolean" }).default(false),
   settings: text("settings", { mode: "json" }).$type<Record<string, unknown>>().default({}),
   stripeCustomerId: text("stripe_customer_id"),
-  quoteCounter: integer("quote_counter").default(1000),
-  jobCounter: integer("job_counter").default(1000),
-  invoiceCounter: integer("invoice_counter").default(1000),
+  quoteCounter: integer("quote_counter").notNull().default(1000),
+  jobCounter: integer("job_counter").notNull().default(1000),
+  invoiceCounter: integer("invoice_counter").notNull().default(1000),
 });
 
 // ============================================================

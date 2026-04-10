@@ -5,6 +5,7 @@ import { eq, and, asc } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
 import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
+import { parseBody } from "@/lib/utils/parse-body";
 
 export async function GET(_req: NextRequest) {
   const authResult = await requireRole("technician");
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
   const limited = rateLimit(`session:${userId}`, 60, 60_000);
   if (limited) return limited;
 
-  const body = await req.json() as {
+  const body = await parseBody<{
     name?: string;
     sku?: string;
     quantity?: number;
@@ -39,10 +40,15 @@ export async function POST(req: NextRequest) {
     unitCost?: number;
     location?: string;
     category?: string;
-  };
+  }>(req);
+  if (body instanceof NextResponse) return body;
 
   if (!body.name) {
     return NextResponse.json({ error: "name is required" }, { status: 422 });
+  }
+
+  if (body.quantity !== undefined && body.quantity < 0) {
+    return NextResponse.json({ error: "quantity cannot be negative" }, { status: 422 });
   }
 
   const [row] = await db
@@ -72,7 +78,7 @@ export async function PATCH(req: NextRequest) {
   const limited = rateLimit(`session:${userId}`, 60, 60_000);
   if (limited) return limited;
 
-  const body = await req.json() as {
+  const body = await parseBody<{
     id?: string;
     name?: string;
     sku?: string;
@@ -81,9 +87,14 @@ export async function PATCH(req: NextRequest) {
     unitCost?: number;
     location?: string;
     category?: string;
-  };
+  }>(req);
+  if (body instanceof NextResponse) return body;
 
   if (!body.id) return NextResponse.json({ error: "id is required" }, { status: 422 });
+
+  if (body.quantity !== undefined && body.quantity < 0) {
+    return NextResponse.json({ error: "quantity cannot be negative" }, { status: 422 });
+  }
 
   const updateData: Record<string, unknown> = {};
   if (body.name !== undefined) updateData.name = body.name.trim().slice(0, 200);

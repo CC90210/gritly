@@ -5,6 +5,7 @@ import { eq, and, or, like, desc } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
 import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
+import { parseBody } from "@/lib/utils/parse-body";
 
 export async function GET(req: NextRequest) {
   const authResult = await requireRole("technician");
@@ -16,14 +17,17 @@ export async function GET(req: NextRequest) {
 
   const search = req.nextUrl.searchParams.get("search");
 
-  const conditions = search
+  // Escape LIKE wildcards and cap input length to prevent injection and performance issues
+  const escaped = search ? search.replace(/[%_]/g, "\\$&").slice(0, 100) : null;
+
+  const conditions = escaped
     ? and(
         eq(clients.orgId, orgId),
         or(
-          like(clients.firstName, `%${search}%`),
-          like(clients.lastName, `%${search}%`),
-          like(clients.email, `%${search}%`),
-          like(clients.company, `%${search}%`)
+          like(clients.firstName, `%${escaped}%`),
+          like(clients.lastName, `%${escaped}%`),
+          like(clients.email, `%${escaped}%`),
+          like(clients.company, `%${escaped}%`)
         )
       )
     : eq(clients.orgId, orgId);
@@ -45,7 +49,7 @@ export async function POST(req: NextRequest) {
   const limited = rateLimit(`session:${userId}`, 60, 60_000);
   if (limited) return limited;
 
-  const body = await req.json() as {
+  const body = await parseBody<{
     firstName?: string;
     lastName?: string;
     email?: string;
@@ -55,7 +59,8 @@ export async function POST(req: NextRequest) {
     tags?: string[];
     isLead?: boolean;
     source?: string;
-  };
+  }>(req);
+  if (body instanceof NextResponse) return body;
 
   if (!body.firstName || !body.lastName) {
     return NextResponse.json(

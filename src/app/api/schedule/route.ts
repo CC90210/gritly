@@ -23,6 +23,15 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // Validate date format: must be a valid ISO date (YYYY-MM-DD or full ISO string)
+  const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T[\d:.Z+-]*)?$/;
+  if (!ISO_DATE_RE.test(startParam) || isNaN(Date.parse(startParam))) {
+    return NextResponse.json({ error: "Invalid start date format" }, { status: 422 });
+  }
+  if (!ISO_DATE_RE.test(endParam) || isNaN(Date.parse(endParam))) {
+    return NextResponse.json({ error: "Invalid end date format" }, { status: 422 });
+  }
+
   const rows = await db
     .select()
     .from(jobVisits)

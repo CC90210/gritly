@@ -5,6 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
 import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
+import { parseBody } from "@/lib/utils/parse-body";
 
 export async function GET(
   _req: NextRequest,
@@ -48,7 +49,7 @@ export async function PATCH(
 
   const { id } = await params;
 
-  const body = await req.json() as {
+  const body = await parseBody<{
     status?: string;
     notes?: string;
     validUntil?: string;
@@ -57,7 +58,16 @@ export async function PATCH(
     propertyId?: string;
     approvedAt?: string;
     sentAt?: string;
-  };
+  }>(req);
+  if (body instanceof NextResponse) return body;
+
+  const QUOTE_STATUSES = new Set(["draft", "sent", "approved", "declined", "expired"]);
+  if (body.status !== undefined && !QUOTE_STATUSES.has(body.status)) {
+    return NextResponse.json(
+      { error: `Invalid status. Allowed: ${[...QUOTE_STATUSES].join(", ")}` },
+      { status: 422 }
+    );
+  }
 
   const updateData: Record<string, unknown> = { updatedAt: new Date() };
   if (body.status !== undefined) updateData.status = body.status;

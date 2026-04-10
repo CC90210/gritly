@@ -22,11 +22,11 @@ export async function GET() {
     return NextResponse.json({ error: "No org" }, { status: 400 });
   }
 
-  // Find client record by userId first, fall back to email match
+  // Find client record by userId first (scoped to org), fall back to email match
   const clientRows = await db
     .select()
     .from(clients)
-    .where(eq(clients.userId, session.user.id))
+    .where(and(eq(clients.userId, session.user.id), eq(clients.orgId, user.orgId)))
     .limit(1);
 
   let client = clientRows[0];

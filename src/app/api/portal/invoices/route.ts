@@ -23,7 +23,7 @@ export async function GET() {
   const clientRows = await db
     .select({ id: clients.id })
     .from(clients)
-    .where(eq(clients.userId, session.user.id))
+    .where(and(eq(clients.userId, session.user.id), eq(clients.orgId, user.orgId)))
     .limit(1);
 
   let clientId = clientRows[0]?.id;

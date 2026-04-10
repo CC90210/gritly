@@ -5,6 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
 import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
+import { parseBody } from "@/lib/utils/parse-body";
 
 export async function GET(
   _req: NextRequest,
@@ -53,7 +54,7 @@ export async function PATCH(
 
   const { id } = await params;
 
-  const body = await req.json() as {
+  const body = await parseBody<{
     status?: string;
     notes?: string;
     dueDate?: string;
@@ -65,7 +66,16 @@ export async function PATCH(
       notes?: string;
       stripePaymentId?: string;
     };
-  };
+  }>(req);
+  if (body instanceof NextResponse) return body;
+
+  const INVOICE_STATUSES = new Set(["draft", "sent", "partial", "paid", "overdue", "void"]);
+  if (body.status !== undefined && !INVOICE_STATUSES.has(body.status)) {
+    return NextResponse.json(
+      { error: `Invalid status. Allowed: ${[...INVOICE_STATUSES].join(", ")}` },
+      { status: 422 }
+    );
+  }
 
   const [invoice] = await db
     .select()
@@ -76,9 +86,28 @@ export async function PATCH(
   if (!invoice) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   if (body.payment) {
+    // Block payments on void or draft invoices
+    if (invoice.status === "void" || invoice.status === "draft") {
+      return NextResponse.json(
+        { error: `Cannot record payment on a ${invoice.status} invoice` },
+        { status: 422 }
+      );
+    }
+
     const { amount, method, notes: paymentNotes, stripePaymentId } = body.payment;
-    if (!amount || amount <= 0) {
-      return NextResponse.json({ error: "Payment amount must be positive" }, { status: 422 });
+
+    // Validate amount is a finite positive number (not string, not NaN)
+    if (typeof amount !== "number" || !isFinite(amount) || amount <= 0) {
+      return NextResponse.json({ error: "Payment amount must be a positive finite number" }, { status: 422 });
+    }
+
+    // Block overpayment
+    const balanceDue = (invoice.total ?? 0) - (invoice.amountPaid ?? 0);
+    if (amount > balanceDue + 0.005) {
+      return NextResponse.json(
+        { error: `Payment amount (${amount}) exceeds balance due (${balanceDue.toFixed(2)})` },
+        { status: 422 }
+      );
     }
 
     const [paymentRow] = await db.insert(payments).values({
@@ -109,6 +138,41 @@ export async function PATCH(
       .where(eq(invoices.id, id));
 
     logAudit({ orgId, userId, action: "create", entityType: "payment", entityId: paymentRow.id, metadata: { invoiceId: id, amount } });
+
+    // Payment handler sets final status — do not let the rest of the body override it
+    const { payment: _payment, status: _status, ...nonPaymentRest } = body;
+    const updateData: Record<string, unknown> = { updatedAt: new Date() };
+    if (nonPaymentRest.notes !== undefined) updateData.notes = nonPaymentRest.notes;
+    if (nonPaymentRest.dueDate !== undefined) updateData.dueDate = nonPaymentRest.dueDate;
+    if (nonPaymentRest.sentAt) updateData.sentAt = new Date(nonPaymentRest.sentAt);
+    if (nonPaymentRest.paidAt) updateData.paidAt = new Date(nonPaymentRest.paidAt);
+
+    if (Object.keys(updateData).length > 1) {
+      await db
+        .update(invoices)
+        .set(updateData)
+        .where(and(eq(invoices.id, id), eq(invoices.orgId, orgId)));
+    }
+
+    logAudit({ orgId, userId, action: "update", entityType: "invoice", entityId: id, metadata: nonPaymentRest });
+
+    const [updated] = await db
+      .select()
+      .from(invoices)
+      .where(eq(invoices.id, id))
+      .limit(1);
+
+    const items = await db
+      .select()
+      .from(invoiceItems)
+      .where(eq(invoiceItems.invoiceId, id));
+
+    const invoicePayments = await db
+      .select()
+      .from(payments)
+      .where(eq(payments.invoiceId, id));
+
+    return NextResponse.json({ ...updated, items, payments: invoicePayments });
   }
 
   const { payment: _payment, ...rest } = body;
