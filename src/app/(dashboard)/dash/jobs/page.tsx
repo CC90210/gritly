@@ -170,40 +170,76 @@ export default function JobsPage() {
         </div>
       ) : (
         /* Kanban */
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 overflow-x-auto">
-          {["unscheduled", "scheduled", "in_progress", "completed"].map((status) => {
-            const color = STATUS_COLORS[status]?.column ?? "border-[#1f1f1f]";
-            return (
-              <div key={status} className={cn("bg-[#111111] border rounded-2xl overflow-hidden flex flex-col", color)}>
-                <div className="px-3 py-2.5 border-b border-[#1f1f1f] flex items-center justify-between">
-                  <span className="text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">
-                    {status.replace(/_/g, " ")}
-                  </span>
-                  <span className="text-xs text-[#4b5563]">{byStatus[status]?.length ?? 0}</span>
+        <div className="space-y-4">
+          {/* Active columns */}
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 overflow-x-auto">
+            {["unscheduled", "scheduled", "in_progress", "completed"].map((status) => {
+              const color = STATUS_COLORS[status]?.column ?? "border-[#1f1f1f]";
+              return (
+                <div key={status} className={cn("bg-[#111111] border rounded-2xl overflow-hidden flex flex-col", color)}>
+                  <div className="px-3 py-2.5 border-b border-[#1f1f1f] flex items-center justify-between">
+                    <span className="text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">
+                      {status.replace(/_/g, " ")}
+                    </span>
+                    <span className="text-xs text-[#4b5563]">{byStatus[status]?.length ?? 0}</span>
+                  </div>
+                  <div className="p-2 space-y-2 flex-1">
+                    {(byStatus[status] ?? []).map((j) => (
+                      <Link
+                        key={j.id}
+                        href={`/dash/jobs/${j.id}`}
+                        className="block bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-3 hover:border-[#374151] transition-colors"
+                      >
+                        <p className="text-xs font-medium text-orange-500 mb-0.5">{j.jobNumber}</p>
+                        <p className="text-sm text-white font-medium leading-snug">{j.title}</p>
+                        {j.scheduledStart && (
+                          <p className="text-xs text-[#6b7280] mt-1">
+                            {new Date(j.scheduledStart).toLocaleDateString()}
+                          </p>
+                        )}
+                      </Link>
+                    ))}
+                    {(byStatus[status] ?? []).length === 0 && (
+                      <p className="text-xs text-[#4b5563] text-center py-4">No {jobLabelPlural.toLowerCase()}</p>
+                    )}
+                  </div>
                 </div>
-                <div className="p-2 space-y-2 flex-1">
-                  {(byStatus[status] ?? []).map((j) => (
-                    <Link
-                      key={j.id}
-                      href={`/dash/jobs/${j.id}`}
-                      className="block bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-3 hover:border-[#374151] transition-colors"
-                    >
-                      <p className="text-xs font-medium text-orange-500 mb-0.5">{j.jobNumber}</p>
-                      <p className="text-sm text-white font-medium leading-snug">{j.title}</p>
-                      {j.scheduledStart && (
-                        <p className="text-xs text-[#6b7280] mt-1">
-                          {new Date(j.scheduledStart).toLocaleDateString()}
-                        </p>
-                      )}
-                    </Link>
-                  ))}
-                  {(byStatus[status] ?? []).length === 0 && (
-                    <p className="text-xs text-[#4b5563] text-center py-4">No {jobLabelPlural.toLowerCase()}</p>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+
+          {/* On hold and cancelled — shown as separate sections below main board */}
+          {(["on_hold", "cancelled"] as const).some((s) => (byStatus[s]?.length ?? 0) > 0) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {(["on_hold", "cancelled"] as const).map((status) => {
+                const items = byStatus[status] ?? [];
+                if (items.length === 0) return null;
+                const color = STATUS_COLORS[status]?.column ?? "border-[#1f1f1f]";
+                return (
+                  <div key={status} className={cn("bg-[#111111] border rounded-2xl overflow-hidden", color)}>
+                    <div className="px-3 py-2.5 border-b border-[#1f1f1f] flex items-center justify-between">
+                      <span className="text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">
+                        {status.replace(/_/g, " ")}
+                      </span>
+                      <span className="text-xs text-[#4b5563]">{items.length}</span>
+                    </div>
+                    <div className="p-2 space-y-2">
+                      {items.map((j) => (
+                        <Link
+                          key={j.id}
+                          href={`/dash/jobs/${j.id}`}
+                          className="block bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-3 hover:border-[#374151] transition-colors"
+                        >
+                          <p className="text-xs font-medium text-orange-500 mb-0.5">{j.jobNumber}</p>
+                          <p className="text-sm text-white font-medium leading-snug">{j.title}</p>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

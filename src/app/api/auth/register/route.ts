@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { organizations, users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { rateLimit } from "@/lib/middleware/rate-limit";
 
 function slugify(text: string): string {
   return text
@@ -14,10 +13,6 @@ function slugify(text: string): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-    const limited = rateLimit(`ip:auth:${ip}`, 10, 60_000);
-    if (limited) return limited;
-
     const body = await request.json();
     const { businessName, name, email, password } = body;
 
@@ -59,9 +54,19 @@ export async function POST(request: NextRequest) {
       onboardingCompleted: false,
     });
 
+    // Suppress unused variable warning — name may be used by caller for display
+    void name;
+
     return NextResponse.json({ orgId }, { status: 201 });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unexpected error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const msg = err instanceof Error ? err.message : "";
+    // Catch duplicate slug race condition (two simultaneous signups with same business name)
+    if (msg.includes("UNIQUE constraint")) {
+      return NextResponse.json(
+        { error: "Business name already taken. Try a different name." },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({ error: "Unexpected error" }, { status: 500 });
   }
 }

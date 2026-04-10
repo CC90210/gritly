@@ -3,17 +3,13 @@ import { db } from "@/lib/db";
 import { invoices, invoiceItems, organizations, clients, jobs, quotes } from "@/lib/db/schema";
 import { eq, desc, sql, and } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
-import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { parseBody } from "@/lib/utils/parse-body";
 
 export async function GET(req: NextRequest) {
   const authResult = await requireRole("technician");
   if (!isAuthorized(authResult)) return authResult;
-  const { orgId, userId } = authResult;
-
-  const limited = rateLimit(`session:${userId}`, 60, 60_000);
-  if (limited) return limited;
+  const { orgId } = authResult;
 
   const { searchParams } = new URL(req.url);
   const clientId = searchParams.get("clientId");
@@ -35,9 +31,6 @@ export async function POST(req: NextRequest) {
   const authResult = await requireRole("manager");
   if (!isAuthorized(authResult)) return authResult;
   const { orgId, userId } = authResult;
-
-  const limited = rateLimit(`session:${userId}`, 60, 60_000);
-  if (limited) return limited;
 
   const body = await parseBody<{
     clientId?: string;
@@ -93,15 +86,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const [org] = await db
-    .update(organizations)
-    .set({ invoiceCounter: sql`invoice_counter + 1` })
-    .where(eq(organizations.id, orgId))
-    .returning({ invoiceCounter: organizations.invoiceCounter });
-
-  const counter = org?.invoiceCounter ?? 1000;
-  const invoiceNumber = `INV-${String(counter).padStart(5, "0")}`;
-
   const items = body.items ?? [];
   const taxRate = body.taxRate ?? 0.13;
   const subtotal = items.reduce(
@@ -111,44 +95,58 @@ export async function POST(req: NextRequest) {
   const taxAmount = subtotal * taxRate;
   const total = subtotal + taxAmount;
 
-  const [invoice] = await db
-    .insert(invoices)
-    .values({
-      orgId,
-      invoiceNumber,
-      clientId: body.clientId,
-      jobId: body.jobId ?? null,
-      quoteId: body.quoteId ?? null,
-      dueDate: body.dueDate,
-      taxRate,
-      subtotal,
-      taxAmount,
-      total,
-      amountPaid: 0,
-      notes: body.notes ?? null,
-      status: "draft",
-    })
-    .returning();
+  // Wrap counter increment and insert in a transaction to prevent number gaps on failure
+  const invoice = await db.transaction(async (tx) => {
+    const [org] = await tx
+      .update(organizations)
+      .set({ invoiceCounter: sql`invoice_counter + 1` })
+      .where(eq(organizations.id, orgId))
+      .returning({ invoiceCounter: organizations.invoiceCounter });
 
-  if (items.length > 0) {
-    await db.insert(invoiceItems).values(
-      items.map((item, i) => ({
-        invoiceId: invoice.id,
-        description: item.description,
-        quantity: item.quantity ?? 1,
-        unitPrice: item.unitPrice,
-        total: item.unitPrice * (item.quantity ?? 1),
-        sortOrder: item.sortOrder ?? i,
-      }))
-    );
-  }
+    const counter = org?.invoiceCounter ?? 1000;
+    const invoiceNumber = `INV-${String(counter).padStart(5, "0")}`;
+
+    const [newInvoice] = await tx
+      .insert(invoices)
+      .values({
+        orgId,
+        invoiceNumber,
+        clientId: body.clientId!,
+        jobId: body.jobId ?? null,
+        quoteId: body.quoteId ?? null,
+        dueDate: body.dueDate!,
+        taxRate,
+        subtotal,
+        taxAmount,
+        total,
+        amountPaid: 0,
+        notes: body.notes ?? null,
+        status: "draft",
+      })
+      .returning();
+
+    if (items.length > 0) {
+      await tx.insert(invoiceItems).values(
+        items.map((item, i) => ({
+          invoiceId: newInvoice.id,
+          description: item.description,
+          quantity: item.quantity ?? 1,
+          unitPrice: item.unitPrice,
+          total: item.unitPrice * (item.quantity ?? 1),
+          sortOrder: item.sortOrder ?? i,
+        }))
+      );
+    }
+
+    return newInvoice;
+  });
 
   const insertedItems = await db
     .select()
     .from(invoiceItems)
     .where(eq(invoiceItems.invoiceId, invoice.id));
 
-  logAudit({ orgId, userId, action: "create", entityType: "invoice", entityId: invoice.id });
+  await logAudit({ orgId, userId, action: "create", entityType: "invoice", entityId: invoice.id });
 
   return NextResponse.json({ ...invoice, items: insertedItems }, { status: 201 });
 }

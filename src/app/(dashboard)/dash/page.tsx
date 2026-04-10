@@ -190,9 +190,15 @@ export default function DashPage() {
     }
   }
 
-  const widgets = industryConfig?.defaultWidgets ?? [
+  // Filter widgets to only those present in both WIDGET_CONFIG and the DashStats type
+  // so industry configs that list "todaysRoute" or "recurringJobs" don't cause
+  // undefined key lookups before those stats fields exist in the API.
+  const rawWidgets = industryConfig?.defaultWidgets ?? [
     "revenue", "openQuotes", "activeJobs", "overdueInvoices", "upcomingJobs", "recentRequests",
   ];
+  const widgets = rawWidgets.filter(
+    (w) => w in WIDGET_CONFIG && (stats === null || w in stats)
+  );
 
   const terminology = industryConfig?.terminology ?? {
     worker: "Technician",

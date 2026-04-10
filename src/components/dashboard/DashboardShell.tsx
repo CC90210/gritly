@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "@/lib/auth/client";
@@ -135,8 +135,17 @@ export function DashboardShell({
   const userMenuRef = useRef<HTMLDivElement>(null);
   const { setOrg, setIndustryConfig } = useOrgStore();
 
-  // Hydrate the org store on mount
-  useEffect(() => {
+  // Hydrate the org store synchronously before paint so child components
+  // that read from the store don't see null on their first render.
+  const hydratedRef = useRef(false);
+  if (!hydratedRef.current) {
+    setOrg(org);
+    setIndustryConfig(industryConfig);
+    hydratedRef.current = true;
+  }
+
+  // Keep the store in sync if props change (e.g. layout re-renders with new org data)
+  useLayoutEffect(() => {
     setOrg(org);
     setIndustryConfig(industryConfig);
   }, [org, industryConfig, setOrg, setIndustryConfig]);

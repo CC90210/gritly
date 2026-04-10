@@ -22,18 +22,18 @@ export type AuditEntityType =
   | "inventory_item";
 
 /**
- * Log an audit event. Fire-and-forget — never blocks the response.
+ * Log an audit event. Awaitable — callers should await this so the insert
+ * completes before the serverless function tears down.
  */
-export function logAudit(params: {
+export async function logAudit(params: {
   orgId: string;
   userId: string;
   action: AuditAction;
   entityType: AuditEntityType;
   entityId: string;
   metadata?: Record<string, unknown>;
-}): void {
-  // Fire-and-forget: don't await, don't block the caller
-  db.insert(auditLogs)
+}): Promise<void> {
+  await db.insert(auditLogs)
     .values({
       orgId: params.orgId,
       userId: params.userId,
@@ -43,6 +43,8 @@ export function logAudit(params: {
       metadata: params.metadata ?? {},
     })
     .catch((err) => {
+      // Non-fatal: audit failure must never break the primary request
+      // eslint-disable-next-line no-console
       console.error("[audit] Failed to log:", err);
     });
 }

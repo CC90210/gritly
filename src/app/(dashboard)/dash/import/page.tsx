@@ -70,37 +70,68 @@ const PRESET_MAPPINGS: Record<ImportFormat, Record<string, string>> = {
 
 // ─── CSV parsing ──────────────────────────────────────────────────────────────
 
+/**
+ * RFC 4180-compliant CSV parser.
+ * Handles: quoted fields with embedded newlines, escaped quotes (doubled ""),
+ * CRLF/LF line endings, and trailing newlines.
+ */
 function parseCSV(text: string): { headers: string[]; rows: string[][] } {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
-  if (lines.length === 0) return { headers: [], rows: [] };
+  const records: string[][] = [];
+  let current: string[] = [];
+  let field = "";
+  let inQuotes = false;
+  let i = 0;
 
-  const parseRow = (line: string): string[] => {
-    const result: string[] = [];
-    let current = "";
-    let inQuotes = false;
+  // Normalise CRLF → LF then strip trailing newline
+  const data = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n$/, "");
 
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
+  while (i < data.length) {
+    const ch = data[i];
+
+    if (inQuotes) {
       if (ch === '"') {
-        if (inQuotes && line[i + 1] === '"') {
-          current += '"';
-          i++;
+        if (data[i + 1] === '"') {
+          // Escaped double-quote
+          field += '"';
+          i += 2;
         } else {
-          inQuotes = !inQuotes;
+          // End of quoted field
+          inQuotes = false;
+          i++;
         }
-      } else if (ch === "," && !inQuotes) {
-        result.push(current.trim());
-        current = "";
       } else {
-        current += ch;
+        field += ch;
+        i++;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+        i++;
+      } else if (ch === ",") {
+        current.push(field.trim());
+        field = "";
+        i++;
+      } else if (ch === "\n") {
+        current.push(field.trim());
+        field = "";
+        if (current.some((f) => f !== "")) records.push(current);
+        current = [];
+        i++;
+      } else {
+        field += ch;
+        i++;
       }
     }
-    result.push(current.trim());
-    return result;
-  };
+  }
 
-  const headers = parseRow(lines[0]);
-  const rows = lines.slice(1).map(parseRow);
+  // Last field / last record
+  current.push(field.trim());
+  if (current.some((f) => f !== "")) records.push(current);
+
+  if (records.length === 0) return { headers: [], rows: [] };
+
+  const headers = records[0];
+  const rows = records.slice(1);
   return { headers, rows };
 }
 

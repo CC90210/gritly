@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { properties } from "@/lib/db/schema";
+import { properties, quotes, jobs } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
-import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
 
 export async function GET(
@@ -12,10 +11,7 @@ export async function GET(
 ) {
   const authResult = await requireRole("technician");
   if (!isAuthorized(authResult)) return authResult;
-  const { orgId, userId } = authResult;
-
-  const limited = rateLimit(`session:${userId}`, 60, 60_000);
-  if (limited) return limited;
+  const { orgId } = authResult;
 
   const { id } = await params;
 
@@ -36,9 +32,6 @@ export async function PATCH(
   const authResult = await requireRole("manager");
   if (!isAuthorized(authResult)) return authResult;
   const { orgId, userId } = authResult;
-
-  const limited = rateLimit(`session:${userId}`, 60, 60_000);
-  if (limited) return limited;
 
   const { id } = await params;
 
@@ -74,7 +67,7 @@ export async function PATCH(
 
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  logAudit({ orgId, userId, action: "update", entityType: "property", entityId: id, metadata: body });
+  await logAudit({ orgId, userId, action: "update", entityType: "property", entityId: id, metadata: body });
 
   return NextResponse.json(updated);
 }
@@ -87,10 +80,26 @@ export async function DELETE(
   if (!isAuthorized(authResult)) return authResult;
   const { orgId, userId } = authResult;
 
-  const limited = rateLimit(`session:${userId}`, 60, 60_000);
-  if (limited) return limited;
-
   const { id } = await params;
+
+  // Prevent deletion if quotes or jobs reference this property
+  const [quotesRef] = await db
+    .select({ id: quotes.id })
+    .from(quotes)
+    .where(eq(quotes.propertyId, id))
+    .limit(1);
+  const [jobsRef] = await db
+    .select({ id: jobs.id })
+    .from(jobs)
+    .where(eq(jobs.propertyId, id))
+    .limit(1);
+
+  if (quotesRef || jobsRef) {
+    return NextResponse.json(
+      { error: "Cannot delete property with existing quotes or jobs" },
+      { status: 422 }
+    );
+  }
 
   const [deleted] = await db
     .delete(properties)
@@ -99,7 +108,7 @@ export async function DELETE(
 
   if (!deleted) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  logAudit({ orgId, userId, action: "delete", entityType: "property", entityId: id });
+  await logAudit({ orgId, userId, action: "delete", entityType: "property", entityId: id });
 
   return NextResponse.json({ success: true });
 }

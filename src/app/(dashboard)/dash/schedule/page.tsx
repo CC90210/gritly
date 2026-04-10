@@ -22,7 +22,8 @@ const MONTHS = [
 ];
 
 function isoDate(d: Date): string {
-  return d.toISOString().split("T")[0];
+  // Use local date (not UTC) to avoid off-by-one errors when user is behind UTC
+  return d.toLocaleDateString("en-CA"); // returns YYYY-MM-DD in local timezone
 }
 
 function startOfMonth(year: number, month: number): Date {
@@ -183,6 +184,7 @@ export default function SchedulePage() {
                       {dayEvents.slice(0, 2).map((ev) => (
                         <div
                           key={ev.id}
+                          title={ev.notes ?? "Job visit"}
                           className="w-full h-1.5 rounded-full bg-orange-500 mb-0.5"
                         />
                       ))}

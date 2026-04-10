@@ -54,7 +54,7 @@ export default function PortalShell({ orgName, user, clientName, children }: Por
   }
 
   const displayName = clientName || user.email;
-  const initial = (clientName[0] ?? user.email[0] ?? "?").toUpperCase();
+  const initial = ((clientName || user.email || "?")[0] ?? "?").toUpperCase();
 
   const NavLinks = (
     <nav className="flex-1 overflow-y-auto py-3 px-2">

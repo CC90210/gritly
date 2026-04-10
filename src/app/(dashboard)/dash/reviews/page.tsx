@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Star, Plus, Loader2, X, Search, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
@@ -58,6 +58,7 @@ export default function ReviewsPage() {
   const [selectedClient, setSelectedClient] = useState<ClientOption | null>(null);
   const [clientLoading, setClientLoading] = useState(false);
   const [platform, setPlatform] = useState("google");
+  const clientAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     loadReviews();
@@ -91,11 +92,13 @@ export default function ReviewsPage() {
   useEffect(() => {
     if (clientSearch.length < 2) { setClientOptions([]); return; }
     const t = setTimeout(() => {
+      clientAbortRef.current?.abort();
+      clientAbortRef.current = new AbortController();
       setClientLoading(true);
-      fetch(`/api/clients?search=${encodeURIComponent(clientSearch)}`)
+      fetch(`/api/clients?search=${encodeURIComponent(clientSearch)}`, { signal: clientAbortRef.current.signal })
         .then((r) => r.json())
         .then((d) => setClientOptions(Array.isArray(d) ? d.slice(0, 6) : []))
-        .catch(() => {})
+        .catch((e) => { if (e.name !== "AbortError") setClientOptions([]); })
         .finally(() => setClientLoading(false));
     }, 300);
     return () => clearTimeout(t);

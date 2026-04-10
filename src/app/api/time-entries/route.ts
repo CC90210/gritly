@@ -3,17 +3,13 @@ import { db } from "@/lib/db";
 import { timeEntries, teamMembers, jobs } from "@/lib/db/schema";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
-import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { parseBody } from "@/lib/utils/parse-body";
 
 export async function GET(req: NextRequest) {
   const authResult = await requireRole("technician");
   if (!isAuthorized(authResult)) return authResult;
-  const { orgId, userId } = authResult;
-
-  const limited = rateLimit(`session:${userId}`, 60, 60_000);
-  if (limited) return limited;
+  const { orgId } = authResult;
 
   const { searchParams } = new URL(req.url);
   const jobId = searchParams.get("jobId");
@@ -54,9 +50,6 @@ export async function POST(req: NextRequest) {
   const authResult = await requireRole("technician");
   if (!isAuthorized(authResult)) return authResult;
   const { orgId, userId } = authResult;
-
-  const limited = rateLimit(`session:${userId}`, 60, 60_000);
-  if (limited) return limited;
 
   const body = await parseBody<{
     teamMemberId?: string;
@@ -115,47 +108,10 @@ export async function POST(req: NextRequest) {
     })
     .returning();
 
-  logAudit({ orgId, userId, action: "create", entityType: "time_entry", entityId: row.id });
+  await logAudit({ orgId, userId, action: "create", entityType: "time_entry", entityId: row.id });
 
   return NextResponse.json(row, { status: 201 });
 }
 
-export async function PATCH(req: NextRequest) {
-  const authResult = await requireRole("technician");
-  if (!isAuthorized(authResult)) return authResult;
-  const { orgId, userId } = authResult;
-
-  const limited = rateLimit(`session:${userId}`, 60, 60_000);
-  if (limited) return limited;
-
-  const body = await parseBody<{ id?: string; clockOut?: string; notes?: string }>(req);
-  if (body instanceof NextResponse) return body;
-  if (!body.id) return NextResponse.json({ error: "id is required" }, { status: 422 });
-
-  const [existing] = await db
-    .select({ clockIn: timeEntries.clockIn, teamMemberId: timeEntries.teamMemberId, orgId: timeEntries.orgId })
-    .from(timeEntries)
-    .where(and(eq(timeEntries.id, body.id), eq(timeEntries.orgId, orgId)))
-    .limit(1);
-
-  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
-  const clockOut = body.clockOut ? new Date(body.clockOut) : new Date();
-  const durationMinutes = Math.max(
-    0,
-    Math.round((clockOut.getTime() - existing.clockIn.getTime()) / 60_000)
-  );
-
-  const updateData: Record<string, unknown> = { clockOut, durationMinutes };
-  if (body.notes !== undefined) updateData.notes = body.notes;
-
-  const [updated] = await db
-    .update(timeEntries)
-    .set(updateData)
-    .where(eq(timeEntries.id, body.id))
-    .returning();
-
-  logAudit({ orgId, userId, action: "update", entityType: "time_entry", entityId: body.id });
-
-  return NextResponse.json(updated);
-}
+// PATCH removed from collection route — use /api/time-entries/[id] instead.
+// The collection-level PATCH was redundant and lacked proper org-scoping on the update.

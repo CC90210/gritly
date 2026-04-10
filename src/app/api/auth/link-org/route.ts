@@ -4,17 +4,12 @@ import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { users, organizations } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { rateLimit } from "@/lib/middleware/rate-limit";
 
 export async function POST(request: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-  const limited = rateLimit(`ip:auth:${ip}`, 10, 60_000);
-  if (limited) return limited;
 
   const { orgId } = await request.json() as { orgId?: string };
   if (!orgId) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Plus, Trash2, Loader2, Search } from "lucide-react";
@@ -34,6 +34,7 @@ export default function NewInvoicePage() {
   const [selectedClient, setSelectedClient] = useState<ClientOption | null>(null);
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [clientLoading, setClientLoading] = useState(false);
+  const clientAbortRef = useRef<AbortController | null>(null);
 
   const [items, setItems] = useState<LineItem[]>([{ description: "", quantity: 1, unitPrice: 0 }]);
   const [taxRate, setTaxRate] = useState(DEFAULT_TAX);
@@ -51,15 +52,17 @@ export default function NewInvoicePage() {
       .catch(() => {});
   }, [searchParams]);
 
-  // Debounced client search
+  // Debounced client search with AbortController to prevent stale results
   useEffect(() => {
     if (clientSearch.length < 2) { setClientOptions([]); return; }
     const t = setTimeout(() => {
+      clientAbortRef.current?.abort();
+      clientAbortRef.current = new AbortController();
       setClientLoading(true);
-      fetch(`/api/clients?search=${encodeURIComponent(clientSearch)}`)
+      fetch(`/api/clients?search=${encodeURIComponent(clientSearch)}`, { signal: clientAbortRef.current.signal })
         .then((r) => r.json())
         .then((d) => setClientOptions(Array.isArray(d) ? d.slice(0, 8) : []))
-        .catch(() => {})
+        .catch((e) => { if (e.name !== "AbortError") setClientOptions([]); })
         .finally(() => setClientLoading(false));
     }, 300);
     return () => clearTimeout(t);

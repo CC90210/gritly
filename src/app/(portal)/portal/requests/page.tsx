@@ -17,7 +17,8 @@ interface ServiceRequest {
 
 const STATUS_COLORS: Record<string, string> = {
   new: "text-blue-400 bg-blue-500/10",
-  in_review: "text-yellow-400 bg-yellow-500/10",
+  // API/DB stores "reviewing" — align with the value used in requests/[id]/route.ts
+  reviewing: "text-yellow-400 bg-yellow-500/10",
   scheduled: "text-orange-400 bg-orange-500/10",
   completed: "text-green-400 bg-green-500/10",
   cancelled: "text-red-400 bg-red-500/10",

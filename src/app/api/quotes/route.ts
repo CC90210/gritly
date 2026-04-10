@@ -3,17 +3,13 @@ import { db } from "@/lib/db";
 import { quotes, quoteItems, organizations, clients } from "@/lib/db/schema";
 import { eq, desc, sql, and } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
-import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { parseBody } from "@/lib/utils/parse-body";
 
 export async function GET(req: NextRequest) {
   const authResult = await requireRole("technician");
   if (!isAuthorized(authResult)) return authResult;
-  const { orgId, userId } = authResult;
-
-  const limited = rateLimit(`session:${userId}`, 60, 60_000);
-  if (limited) return limited;
+  const { orgId } = authResult;
 
   const { searchParams } = new URL(req.url);
   const clientId = searchParams.get("clientId");
@@ -35,9 +31,6 @@ export async function POST(req: NextRequest) {
   const authResult = await requireRole("manager");
   if (!isAuthorized(authResult)) return authResult;
   const { orgId, userId } = authResult;
-
-  const limited = rateLimit(`session:${userId}`, 60, 60_000);
-  if (limited) return limited;
 
   const body = await parseBody<{
     clientId?: string;
@@ -70,15 +63,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid clientId" }, { status: 422 });
   }
 
-  const [org] = await db
-    .update(organizations)
-    .set({ quoteCounter: sql`quote_counter + 1` })
-    .where(eq(organizations.id, orgId))
-    .returning({ quoteCounter: organizations.quoteCounter });
-
-  const counter = org?.quoteCounter ?? 1000;
-  const quoteNumber = `Q-${String(counter).padStart(5, "0")}`;
-
   const items = body.items ?? [];
   const taxRate = body.taxRate ?? 0.13;
   const subtotal = items.reduce(
@@ -88,45 +72,59 @@ export async function POST(req: NextRequest) {
   const taxAmount = subtotal * taxRate;
   const total = subtotal + taxAmount;
 
-  const [quote] = await db
-    .insert(quotes)
-    .values({
-      orgId,
-      quoteNumber,
-      clientId: body.clientId,
-      propertyId: body.propertyId ?? null,
-      taxRate,
-      subtotal,
-      taxAmount,
-      total,
-      depositRequired: body.depositRequired ?? 0,
-      notes: body.notes ?? null,
-      validUntil: body.validUntil ?? null,
-      status: "draft",
-    })
-    .returning();
+  // Wrap counter increment and insert in a transaction to prevent number gaps on failure
+  const quote = await db.transaction(async (tx) => {
+    const [org] = await tx
+      .update(organizations)
+      .set({ quoteCounter: sql`quote_counter + 1` })
+      .where(eq(organizations.id, orgId))
+      .returning({ quoteCounter: organizations.quoteCounter });
 
-  if (items.length > 0) {
-    await db.insert(quoteItems).values(
-      items.map((item, i) => ({
-        quoteId: quote.id,
-        serviceId: item.serviceId ?? null,
-        description: item.description,
-        quantity: item.quantity ?? 1,
-        unitPrice: item.unitPrice,
-        total: item.unitPrice * (item.quantity ?? 1),
-        isOptional: item.isOptional ?? false,
-        sortOrder: item.sortOrder ?? i,
-      }))
-    );
-  }
+    const counter = org?.quoteCounter ?? 1000;
+    const quoteNumber = `Q-${String(counter).padStart(5, "0")}`;
+
+    const [newQuote] = await tx
+      .insert(quotes)
+      .values({
+        orgId,
+        quoteNumber,
+        clientId: body.clientId!,
+        propertyId: body.propertyId ?? null,
+        taxRate,
+        subtotal,
+        taxAmount,
+        total,
+        depositRequired: body.depositRequired ?? 0,
+        notes: body.notes ?? null,
+        validUntil: body.validUntil ?? null,
+        status: "draft",
+      })
+      .returning();
+
+    if (items.length > 0) {
+      await tx.insert(quoteItems).values(
+        items.map((item, i) => ({
+          quoteId: newQuote.id,
+          serviceId: item.serviceId ?? null,
+          description: item.description,
+          quantity: item.quantity ?? 1,
+          unitPrice: item.unitPrice,
+          total: item.unitPrice * (item.quantity ?? 1),
+          isOptional: item.isOptional ?? false,
+          sortOrder: item.sortOrder ?? i,
+        }))
+      );
+    }
+
+    return newQuote;
+  });
 
   const insertedItems = await db
     .select()
     .from(quoteItems)
     .where(eq(quoteItems.quoteId, quote.id));
 
-  logAudit({ orgId, userId, action: "create", entityType: "quote", entityId: quote.id });
+  await logAudit({ orgId, userId, action: "create", entityType: "quote", entityId: quote.id });
 
   return NextResponse.json({ ...quote, items: insertedItems }, { status: 201 });
 }

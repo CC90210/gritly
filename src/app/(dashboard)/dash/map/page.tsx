@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MapPin, Loader2, ExternalLink, Navigation } from "lucide-react";
 
 interface VisitEvent {
@@ -13,14 +13,15 @@ interface VisitEvent {
 }
 
 function isoDate(d: Date): string {
-  return d.toISOString().split("T")[0];
+  return d.toLocaleDateString("en-CA"); // YYYY-MM-DD in local timezone
 }
 
 export default function MapPage() {
   const [visits, setVisits] = useState<VisitEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const today = isoDate(new Date());
+  // Memoized so it doesn't recompute on every render
+  const today = useMemo(() => isoDate(new Date()), []);
 
   useEffect(() => {
     const tomorrow = isoDate(new Date(Date.now() + 86400000));

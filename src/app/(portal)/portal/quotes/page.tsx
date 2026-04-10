@@ -51,7 +51,9 @@ export default function PortalQuotesPage() {
   async function handleAction(id: string, status: "approved" | "declined") {
     setActionId(id);
     try {
-      const res = await fetch(`/api/quotes/${id}`, {
+      // Use portal-scoped endpoint — the dashboard /api/quotes/:id route requires
+      // manager role and would return 403 for client-role portal users.
+      const res = await fetch(`/api/portal/quotes/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { FileCheck, Plus, X, Loader2, RefreshCw, AlertCircle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { FileCheck, Plus, X, Loader2, RefreshCw, AlertCircle, Search } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 interface Agreement {
@@ -34,7 +34,6 @@ function daysUntil(dateStr: string | null): number | null {
 
 export default function AgreementsPage() {
   const [agreements, setAgreements] = useState<Agreement[]>([]);
-  const [clients, setClients] = useState<ClientOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -42,12 +41,21 @@ export default function AgreementsPage() {
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Client search (debounced) — replaces unbounded full client load
+  const [clientSearch, setClientSearch] = useState("");
+  const [clientOptions, setClientOptions] = useState<ClientOption[]>([]);
+  const [selectedClient, setSelectedClient] = useState<ClientOption | null>(null);
+  const [clientLoading, setClientLoading] = useState(false);
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
+  const clientAbortRef = useRef<AbortController | null>(null);
+  // Map of clientId → display name for the agreements table
+  const [clientNames, setClientNames] = useState<Map<string, string>>(new Map());
+
   const [form, setForm] = useState({
-    clientId: "",
     name: "",
     frequency: "monthly",
     price: "",
-    startDate: new Date().toISOString().split("T")[0],
+    startDate: new Date().toLocaleDateString("en-CA"),
     endDate: "",
     notes: "",
   });
@@ -60,20 +68,30 @@ export default function AgreementsPage() {
     loadAll();
   }, []);
 
+  // Debounced client search with AbortController to prevent race conditions
+  useEffect(() => {
+    if (clientSearch.length < 2) { setClientOptions([]); return; }
+    clientAbortRef.current?.abort();
+    clientAbortRef.current = new AbortController();
+    setClientLoading(true);
+    fetch(`/api/clients?search=${encodeURIComponent(clientSearch)}`, { signal: clientAbortRef.current.signal })
+      .then((r) => r.json())
+      .then((d) => setClientOptions(Array.isArray(d) ? d.slice(0, 8) : []))
+      .catch((e) => { if (e.name !== "AbortError") setClientOptions([]); })
+      .finally(() => setClientLoading(false));
+  }, [clientSearch]);
+
   function loadAll() {
     setLoading(true);
     setFetchError(false);
-    Promise.all([
-      fetch("/api/maintenance-agreements").then((r) => {
+    fetch("/api/maintenance-agreements")
+      .then((r) => {
         if (r.status === 401) { window.location.href = "/login"; throw new Error("401"); }
         if (!r.ok) throw new Error("Failed");
         return r.json();
-      }),
-      fetch("/api/clients").then((r) => r.json()),
-    ])
-      .then(([agData, clientData]) => {
+      })
+      .then((agData) => {
         setAgreements(Array.isArray(agData) ? agData : []);
-        setClients(Array.isArray(clientData) ? clientData : []);
       })
       .catch(() => setFetchError(true))
       .finally(() => setLoading(false));
@@ -87,7 +105,7 @@ export default function AgreementsPage() {
   });
 
   async function handleAdd() {
-    if (!form.clientId) { setError("Select a client."); return; }
+    if (!selectedClient) { setError("Select a client."); return; }
     if (!form.name.trim()) { setError("Name is required."); return; }
     if (!form.price || isNaN(parseFloat(form.price))) { setError("Valid price is required."); return; }
     if (!form.startDate) { setError("Start date is required."); return; }
@@ -100,7 +118,7 @@ export default function AgreementsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          clientId: form.clientId,
+          clientId: selectedClient.id,
           name: form.name.trim(),
           frequency: form.frequency,
           price: parseFloat(form.price),
@@ -118,8 +136,12 @@ export default function AgreementsPage() {
 
       const created = await res.json() as Agreement;
       setAgreements((prev) => [created, ...prev]);
+      // Cache this client's name so the table can display it immediately
+      setClientNames((prev) => new Map(prev).set(selectedClient.id, `${selectedClient.firstName} ${selectedClient.lastName}`));
       setShowModal(false);
-      setForm({ clientId: "", name: "", frequency: "monthly", price: "", startDate: new Date().toISOString().split("T")[0], endDate: "", notes: "" });
+      setSelectedClient(null);
+      setClientSearch("");
+      setForm({ name: "", frequency: "monthly", price: "", startDate: new Date().toLocaleDateString("en-CA"), endDate: "", notes: "" });
     } catch {
       setError("Network error.");
     } finally {
@@ -148,9 +170,7 @@ export default function AgreementsPage() {
   }
 
   function getClientName(id: string): string {
-    const c = clients.find((c) => c.id === id);
-    if (!c) return id.slice(0, 8) + "…";
-    return `${c.firstName} ${c.lastName}`;
+    return clientNames.get(id) ?? id.slice(0, 8) + "…";
   }
 
   const inputClass = "w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2 text-sm text-white placeholder:text-[#4b5563] focus:outline-none focus:border-orange-500 transition-colors";
@@ -172,12 +192,44 @@ export default function AgreementsPage() {
             <div className="space-y-4">
               <div>
                 <label className={labelClass}>Client *</label>
-                <select value={form.clientId} onChange={(e) => setField("clientId", e.target.value)} className={inputClass}>
-                  <option value="">Select client...</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>
-                  ))}
-                </select>
+                {selectedClient ? (
+                  <div className="flex items-center justify-between bg-[#0a0a0a] border border-orange-500/40 rounded-xl px-3 py-2">
+                    <span className="text-sm text-white">{selectedClient.firstName} {selectedClient.lastName}</span>
+                    <button onClick={() => { setSelectedClient(null); setClientSearch(""); }} className="text-[#6b7280] hover:text-white ml-2">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4b5563]" />
+                      <input
+                        type="text"
+                        value={clientSearch}
+                        onChange={(e) => { setClientSearch(e.target.value); setShowClientDropdown(true); }}
+                        onFocus={() => setShowClientDropdown(true)}
+                        placeholder="Search clients..."
+                        className={cn(inputClass, "pl-9")}
+                      />
+                      {clientLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6b7280] animate-spin" />}
+                    </div>
+                    {showClientDropdown && clientOptions.length > 0 && (
+                      <div className="absolute z-20 w-full mt-1 bg-[#111111] border border-[#1f1f1f] rounded-xl shadow-xl overflow-hidden">
+                        {clientOptions.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => { setSelectedClient(c); setClientSearch(""); setShowClientDropdown(false); }}
+                            className="w-full text-left px-3 py-2.5 text-sm text-white hover:bg-[#1f1f1f] transition-colors"
+                          >
+                            {c.firstName} {c.lastName}
+                            {c.email && <span className="ml-2 text-xs text-[#6b7280]">{c.email}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div>
                 <label className={labelClass}>Agreement Name *</label>

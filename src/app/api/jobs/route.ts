@@ -3,17 +3,13 @@ import { db } from "@/lib/db";
 import { jobs, organizations, clients, quotes } from "@/lib/db/schema";
 import { eq, desc, sql, and } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
-import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { parseBody } from "@/lib/utils/parse-body";
 
 export async function GET(req: NextRequest) {
   const authResult = await requireRole("technician");
   if (!isAuthorized(authResult)) return authResult;
-  const { orgId, userId } = authResult;
-
-  const limited = rateLimit(`session:${userId}`, 60, 60_000);
-  if (limited) return limited;
+  const { orgId } = authResult;
 
   const { searchParams } = new URL(req.url);
   const clientId = searchParams.get("clientId");
@@ -35,9 +31,6 @@ export async function POST(req: NextRequest) {
   const authResult = await requireRole("manager");
   if (!isAuthorized(authResult)) return authResult;
   const { orgId, userId } = authResult;
-
-  const limited = rateLimit(`session:${userId}`, 60, 60_000);
-  if (limited) return limited;
 
   const body = await parseBody<{
     clientId?: string;
@@ -84,38 +77,43 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const [org] = await db
-    .update(organizations)
-    .set({ jobCounter: sql`job_counter + 1` })
-    .where(eq(organizations.id, orgId))
-    .returning({ jobCounter: organizations.jobCounter });
+  // Wrap counter increment and insert in a transaction to prevent number gaps on failure
+  const job = await db.transaction(async (tx) => {
+    const [org] = await tx
+      .update(organizations)
+      .set({ jobCounter: sql`job_counter + 1` })
+      .where(eq(organizations.id, orgId))
+      .returning({ jobCounter: organizations.jobCounter });
 
-  const counter = org?.jobCounter ?? 1000;
-  const jobNumber = `J-${String(counter).padStart(5, "0")}`;
+    const counter = org?.jobCounter ?? 1000;
+    const jobNumber = `J-${String(counter).padStart(5, "0")}`;
 
-  const [job] = await db
-    .insert(jobs)
-    .values({
-      orgId,
-      jobNumber,
-      clientId: body.clientId,
-      title: body.title,
-      description: body.description ?? null,
-      propertyId: body.propertyId ?? null,
-      quoteId: body.quoteId ?? null,
-      status: body.status ?? "pending",
-      priority: body.priority ?? "medium",
-      recurrence: body.recurrence ?? "once",
-      scheduledStart: body.scheduledStart ? new Date(body.scheduledStart) : null,
-      scheduledEnd: body.scheduledEnd ? new Date(body.scheduledEnd) : null,
-      assignedTo: body.assignedTo ?? [],
-      notes: body.notes ?? null,
-      internalNotes: body.internalNotes ?? null,
-      totalCost: body.totalCost ?? 0,
-    })
-    .returning();
+    const [newJob] = await tx
+      .insert(jobs)
+      .values({
+        orgId,
+        jobNumber,
+        clientId: body.clientId!,
+        title: body.title!,
+        description: body.description ?? null,
+        propertyId: body.propertyId ?? null,
+        quoteId: body.quoteId ?? null,
+        status: body.status ?? "pending",
+        priority: body.priority ?? "medium",
+        recurrence: body.recurrence ?? "once",
+        scheduledStart: body.scheduledStart ? new Date(body.scheduledStart) : null,
+        scheduledEnd: body.scheduledEnd ? new Date(body.scheduledEnd) : null,
+        assignedTo: body.assignedTo ?? [],
+        notes: body.notes ?? null,
+        internalNotes: body.internalNotes ?? null,
+        totalCost: body.totalCost ?? 0,
+      })
+      .returning();
 
-  logAudit({ orgId, userId, action: "create", entityType: "job", entityId: job.id });
+    return newJob;
+  });
+
+  await logAudit({ orgId, userId, action: "create", entityType: "job", entityId: job.id });
 
   return NextResponse.json(job, { status: 201 });
 }

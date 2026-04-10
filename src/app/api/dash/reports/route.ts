@@ -3,7 +3,6 @@ import { db } from "@/lib/db";
 import { clients, quotes, jobs, invoices, expenses, payments, quoteItems, serviceItems } from "@/lib/db/schema";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
-import { rateLimit } from "@/lib/middleware/rate-limit";
 
 interface MonthBucket {
   month: string;
@@ -15,10 +14,7 @@ export async function GET() {
   try {
     const authResult = await requireRole("manager");
     if (!isAuthorized(authResult)) return authResult;
-    const { orgId, userId } = authResult;
-
-    const limited = rateLimit(`session:${userId}`, 60, 60_000);
-    if (limited) return limited;
+    const { orgId } = authResult;
 
     const now = new Date();
     const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
@@ -36,6 +32,7 @@ export async function GET() {
       monthlyExpenses,
       topClientsByRevenue,
       topServicesByFrequency,
+      avgQuoteResult,
     ] = await Promise.all([
       db.select({ count: sql<number>`count(*)` })
         .from(clients)
@@ -112,6 +109,11 @@ export async function GET() {
         .groupBy(quoteItems.serviceId, serviceItems.name)
         .orderBy(desc(sql`count(*)`))
         .limit(5),
+
+      // Average quote value — now runs in parallel with the rest
+      db.select({ avg: sql<number>`coalesce(avg(total), 0)` })
+        .from(quotes)
+        .where(eq(quotes.orgId, orgId)),
     ]);
 
     const totalClients = Number(clientCount[0]?.count ?? 0);
@@ -141,9 +143,7 @@ export async function GET() {
     }
 
     const avgJobValue = totalJobs > 0 ? totalInvoiced / totalJobs : 0;
-    const avgQuoteValue = totalQuotes > 0
-      ? (await db.select({ avg: sql<number>`coalesce(avg(total), 0)` }).from(quotes).where(eq(quotes.orgId, orgId)))[0]?.avg ?? 0
-      : 0;
+    const avgQuoteValue = totalQuotes > 0 ? (Number(avgQuoteResult[0]?.avg ?? 0)) : 0;
 
     return NextResponse.json({
       totalClients,

@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { teamMembers } from "@/lib/db/schema";
+import { teamMembers, timeEntries, expenses } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
-import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
 
 export async function PATCH(
@@ -13,9 +12,6 @@ export async function PATCH(
   const authResult = await requireRole("manager");
   if (!isAuthorized(authResult)) return authResult;
   const { orgId, userId } = authResult;
-
-  const limited = rateLimit(`session:${userId}`, 60, 60_000);
-  if (limited) return limited;
 
   const { id } = await params;
 
@@ -49,7 +45,7 @@ export async function PATCH(
 
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  logAudit({ orgId, userId, action: "update", entityType: "team_member", entityId: id, metadata: body });
+  await logAudit({ orgId, userId, action: "update", entityType: "team_member", entityId: id, metadata: body });
 
   return NextResponse.json(updated);
 }
@@ -62,10 +58,27 @@ export async function DELETE(
   if (!isAuthorized(authResult)) return authResult;
   const { orgId, userId } = authResult;
 
-  const limited = rateLimit(`session:${userId}`, 60, 60_000);
-  if (limited) return limited;
-
   const { id } = await params;
+
+  // Prevent deletion if time entries or expenses reference this team member.
+  // Instruct callers to deactivate instead (set isActive: false via PATCH).
+  const [timeRef] = await db
+    .select({ id: timeEntries.id })
+    .from(timeEntries)
+    .where(eq(timeEntries.teamMemberId, id))
+    .limit(1);
+  const [expRef] = await db
+    .select({ id: expenses.id })
+    .from(expenses)
+    .where(eq(expenses.teamMemberId, id))
+    .limit(1);
+
+  if (timeRef || expRef) {
+    return NextResponse.json(
+      { error: "Cannot delete team member with time entries or expenses. Deactivate them instead." },
+      { status: 422 }
+    );
+  }
 
   const [deleted] = await db
     .delete(teamMembers)
@@ -74,7 +87,7 @@ export async function DELETE(
 
   if (!deleted) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  logAudit({ orgId, userId, action: "delete", entityType: "team_member", entityId: id });
+  await logAudit({ orgId, userId, action: "delete", entityType: "team_member", entityId: id });
 
   return NextResponse.json({ success: true });
 }

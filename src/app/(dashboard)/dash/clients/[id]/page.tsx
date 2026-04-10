@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, useRef, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useOrgStore } from "@/lib/store/org";
@@ -75,6 +75,9 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
   const [tabLoading, setTabLoading] = useState(false);
 
+  // Cache for tab data — only fetch each tab once per page load
+  const tabCache = useRef<Partial<Record<Tab, true>>>({});
+
   useEffect(() => {
     fetch(`/api/clients/${id}`)
       .then((r) => r.json())
@@ -88,7 +91,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
   useEffect(() => {
     if (activeTab === "overview") return;
+    // Skip if already fetched
+    if (tabCache.current[activeTab]) return;
+
     setTabLoading(true);
+    tabCache.current[activeTab] = true;
 
     const endpoints: Record<string, string> = {
       quotes: `/api/quotes?clientId=${id}`,
@@ -103,7 +110,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         if (activeTab === "jobs") setJobs(Array.isArray(d) ? d : []);
         if (activeTab === "invoices") setInvoices(Array.isArray(d) ? d : []);
       })
-      .catch(() => {})
+      .catch(() => {
+        // Reset cache entry on failure so user can retry by switching tabs
+        delete tabCache.current[activeTab];
+      })
       .finally(() => setTabLoading(false));
   }, [activeTab, id]);
 
