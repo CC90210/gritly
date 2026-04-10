@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
-import { ArrowLeft, Loader2, Send, DollarSign, X } from "lucide-react";
+import { ArrowLeft, Loader2, Send, DollarSign, X, Link2, Check } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 interface InvoiceItem {
@@ -69,6 +69,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   // Payment modal
   const [showPayModal, setShowPayModal] = useState(false);
@@ -104,6 +105,31 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       }
     } catch {
       setSaveError("Failed to update invoice. Please try again.");
+    } finally {
+      setActing(null);
+    }
+  }
+
+  async function sendPaymentLink() {
+    setActing("link");
+    setSaveError(null);
+    try {
+      const res = await fetch("/api/payments/create-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoiceId: id }),
+      });
+      if (res.ok) {
+        const data = await res.json() as { url: string };
+        await navigator.clipboard.writeText(data.url);
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 3000);
+      } else {
+        const err = await res.json() as { error?: string };
+        setSaveError(err.error ?? "Failed to create payment link. Please try again.");
+      }
+    } catch {
+      setSaveError("Failed to create payment link. Please try again.");
     } finally {
       setActing(null);
     }
@@ -266,13 +292,34 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           </button>
         )}
         {(invoice.status === "sent" || invoice.status === "partial" || invoice.status === "overdue") && (
-          <button
-            onClick={() => setShowPayModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-green-500/10 hover:bg-green-500/20 text-green-400 text-sm font-medium transition-colors"
-          >
-            <DollarSign className="w-4 h-4" />
-            Record Payment
-          </button>
+          <>
+            <button
+              onClick={() => setShowPayModal(true)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-green-500/10 hover:bg-green-500/20 text-green-400 text-sm font-medium transition-colors"
+            >
+              <DollarSign className="w-4 h-4" />
+              Record Payment
+            </button>
+            <button
+              onClick={sendPaymentLink}
+              disabled={acting !== null}
+              className={cn(
+                "flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-colors",
+                linkCopied
+                  ? "bg-orange-500/20 text-orange-300"
+                  : "bg-orange-500/10 hover:bg-orange-500/20 text-orange-400"
+              )}
+            >
+              {acting === "link" ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : linkCopied ? (
+                <Check className="w-4 h-4" />
+              ) : (
+                <Link2 className="w-4 h-4" />
+              )}
+              {linkCopied ? "Link copied!" : "Send Payment Link"}
+            </button>
+          </>
         )}
       </div>
 

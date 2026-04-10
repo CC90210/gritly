@@ -6,10 +6,8 @@ import { motion, useInView } from "framer-motion";
 import { Check, ArrowRight, Zap } from "lucide-react";
 import { PRICING } from "@/lib/constants/brand";
 import { cn } from "@/lib/utils/cn";
-import type { Metadata } from "next";
 
-// Note: metadata must be in a server component; page is client for toggle interactivity
-// SEO is handled via layout.tsx defaults + route-level generateMetadata if needed
+// Note: metadata is handled via layout.tsx defaults + route-level generateMetadata if needed
 
 function FadeIn({
   children,
@@ -58,31 +56,31 @@ const ALL_FEATURES = [
   { label: "Drag-and-drop scheduling", plans: ["starter", "pro", "business"] },
   { label: "Online booking widget", plans: ["starter", "pro", "business"] },
   { label: "Client portal", plans: ["starter", "pro", "business"] },
-  { label: "Mobile app (iOS & Android)", plans: ["starter", "pro", "business"] },
+  { label: "Mobile app (iOS & Android) (Coming soon)", plans: ["starter", "pro", "business"] },
   { label: "GPS job tracking", plans: ["starter", "pro", "business"] },
   { label: "Job photos & documentation", plans: ["starter", "pro", "business"] },
   { label: "Basic reporting", plans: ["starter", "pro", "business"] },
   { label: "Email & SMS reminders", plans: ["starter", "pro", "business"] },
   { label: "Online payments", plans: ["starter", "pro", "business"] },
-  { label: "Route optimization", plans: ["pro", "business"] },
-  { label: "AI-powered smart dispatch", plans: ["pro", "business"] },
+  { label: "Map view with Google Maps routing", plans: ["pro", "business"] },
+  { label: "Smart scheduling & dispatch", plans: ["pro", "business"] },
   { label: "Job costing & profitability", plans: ["pro", "business"] },
   { label: "Flat-rate pricebook", plans: ["pro", "business"] },
   { label: "Two-way SMS inbox", plans: ["pro", "business"] },
-  { label: "QuickBooks & Xero sync", plans: ["pro", "business"] },
+  { label: "QuickBooks & Xero sync (Coming soon)", plans: ["pro", "business"] },
   { label: "Time tracking & timesheets", plans: ["pro", "business"] },
   { label: "Custom checklists & forms", plans: ["pro", "business"] },
   { label: "Expense tracking", plans: ["pro", "business"] },
-  { label: "Before/after photo reports", plans: ["pro", "business"] },
+  { label: "Job photos & documentation", plans: ["pro", "business"] },
   { label: "Review request automation", plans: ["pro", "business"] },
-  { label: "Offline mobile mode", plans: ["pro", "business"] },
-  { label: "AI receptionist", plans: ["business"] },
+  { label: "Offline mobile mode (Coming soon)", plans: ["pro", "business"] },
+  { label: "AI receptionist (Coming soon)", plans: ["business"] },
   { label: "Advanced reporting & forecasting", plans: ["business"] },
   { label: "Custom automation builder", plans: ["business"] },
   { label: "Maintenance agreements", plans: ["business"] },
   { label: "Inventory & parts tracking", plans: ["business"] },
   { label: "Subcontractor management", plans: ["business"] },
-  { label: "Consumer financing (Wisetack)", plans: ["business"] },
+  { label: "Consumer financing (Coming soon)", plans: ["business"] },
   { label: "API access", plans: ["business"] },
   { label: "Dedicated success manager", plans: ["business"] },
   { label: "Priority support", plans: ["business"] },

@@ -127,18 +127,13 @@ const FEATURES = [
   },
   {
     icon: Zap,
-    title: "Smart Dispatch",
-    desc: "AI-powered scheduling assigns the right tech to the right job.",
-  },
-  {
-    icon: WifiOff,
-    title: "Offline Mode",
-    desc: "Works in basements, dead zones, and rural properties.",
+    title: "Smart Scheduling",
+    desc: "Drag-and-drop calendar with crew assignment and recurring job automation.",
   },
   {
     icon: Camera,
     title: "Job Photos",
-    desc: "GPS-tagged before/after photos. Replaces CompanyCam.",
+    desc: "GPS-tagged photos on every job. Replaces CompanyCam.",
   },
   {
     icon: FileText,
@@ -146,9 +141,14 @@ const FEATURES = [
     desc: "Convert quotes to invoices in seconds. Collect payment on-site.",
   },
   {
+    icon: WifiOff,
+    title: "Offline Mode",
+    desc: "Full offline support coming soon — designed for dead zones and rural properties.",
+  },
+  {
     icon: Route,
-    title: "Route Optimization",
-    desc: "Cut drive time by up to 30%. More jobs, less windshield time.",
+    title: "Map View",
+    desc: "See all your jobs on a map with Google Maps routing for your crew.",
   },
   {
     icon: Star,
@@ -157,8 +157,8 @@ const FEATURES = [
   },
   {
     icon: RefreshCw,
-    title: "Real QuickBooks Sync",
-    desc: "Two-way sync that actually works. No duplicate entry.",
+    title: "Accounting Sync",
+    desc: "QuickBooks & Xero sync coming soon. Export to CSV today.",
   },
   {
     icon: Globe,
@@ -171,11 +171,10 @@ const FEATURES = [
 
 const COMPARISON = [
   { feature: "Unlimited Users", gritly: "All plans", jobber: "$29/user extra" },
-  { feature: "Offline Mode", gritly: true, jobber: false },
-  { feature: "Job Photos", gritly: "Built-in", jobber: "Needs CompanyCam" },
-  { feature: "AI Dispatch", gritly: true, jobber: false },
-  { feature: "Route Optimization", gritly: "All plans", jobber: "Add-on only" },
+  { feature: "Job Photos (Built-in)", gritly: true, jobber: "Needs CompanyCam" },
+  { feature: "Smart Scheduling", gritly: true, jobber: false },
   { feature: "Review Automation", gritly: "Built-in", jobber: "$39/mo add-on" },
+  { feature: "Client Portal", gritly: true, jobber: false },
   { feature: "Starting Price", gritly: "$79/mo", jobber: "$39/mo (1 user)" },
   { feature: "5-Person Team", gritly: "$79/mo", jobber: "$169+/mo" },
   { feature: "10-Person Team", gritly: "$179/mo", jobber: "$349+/mo" },
@@ -353,7 +352,7 @@ function ProblemSection() {
                 <span className="text-orange-500">Unlimited team.</span>
               </h3>
               <p className="mt-4 text-zinc-400 max-w-md mx-auto">
-                CRM, scheduling, invoicing, job photos, route optimization, reviews — all in one place that actually works offline.
+                CRM, scheduling, invoicing, job photos, automated reviews, and a client portal — all in one place.
               </p>
               <Link
                 href="/pricing"

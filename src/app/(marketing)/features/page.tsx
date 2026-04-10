@@ -72,10 +72,10 @@ const FEATURE_CATEGORIES = [
     icon: Calendar,
     title: "Scheduling & Dispatch",
     description:
-      "Drag-and-drop scheduling for your whole team. AI that fills gaps. Emergency dispatch that moves fast.",
+      "Drag-and-drop scheduling for your whole team. Emergency dispatch that moves fast.",
     features: [
       "Drag-and-drop calendar interface",
-      "AI-powered smart dispatch suggestions",
+      "Smart dispatch suggestions",
       "Emergency priority job insertion",
       "Crew and technician assignment",
       "Multi-day job scheduling",
@@ -111,13 +111,13 @@ const FEATURE_CATEGORIES = [
       "Invoice on-site. Collect payment in the driveway. Chase fewer unpaid invoices.",
     features: [
       "One-click quote-to-invoice conversion",
-      "Online payment (card, ACH, Apple Pay)",
+      "Online payment via Stripe (card, ACH)",
       "In-person payment via mobile",
       "Automated invoice reminders",
       "Batch invoicing for recurring clients",
       "Progress billing for large projects",
-      "Consumer financing via Wisetack",
-      "QuickBooks & Xero two-way sync",
+      "Consumer financing (Coming soon)",
+      "QuickBooks & Xero sync (Coming soon)",
     ],
     badge: "Core",
   },
@@ -128,14 +128,14 @@ const FEATURE_CATEGORIES = [
     description:
       "Your techs stay productive even in dead zones. GPS tracking, photos, checklists — all offline-ready.",
     features: [
-      "Offline mobile mode (iOS & Android)",
+      "Offline mobile mode (Coming soon)",
       "GPS-tagged job photos",
-      "Before/after photo comparison",
+      "Before/after photo documentation",
       "Custom checklists and inspection forms",
       "Real-time GPS team tracking",
       "Time tracking and timesheets",
       "Expense tracking with receipt photos",
-      "Route optimization (cut drive time 30%+)",
+      "Map view with Google Maps routing",
     ],
     badge: "Field",
   },
@@ -169,7 +169,7 @@ const FEATURE_CATEGORIES = [
       "Automated invoice reminders",
       "Review request automation (Google)",
       "Email campaigns to client lists",
-      "AI receptionist (answers calls + texts)",
+      "AI receptionist (Coming soon)",
       "Automated quote follow-up sequences",
       "Missed call text-back",
     ],
@@ -182,12 +182,12 @@ const FEATURE_CATEGORIES = [
     description:
       "Plays well with the tools you already use. Replaces the ones you don't need anymore.",
     features: [
-      "QuickBooks Online (two-way sync)",
-      "Xero (two-way sync)",
+      "QuickBooks Online sync (Coming soon)",
+      "Xero sync (Coming soon)",
       "Google Calendar sync",
-      "Wisetack consumer financing",
+      "Consumer financing (Coming soon)",
       "Stripe payment processing",
-      "Zapier (1,000+ app connections)",
+      "Zapier (Coming soon)",
       "REST API access (Business plan)",
       "CSV import from any platform",
     ],
@@ -228,9 +228,9 @@ export default function FeaturesPage() {
           <FadeIn delay={0.2} className="mt-12 flex flex-wrap items-center justify-center gap-8">
             {[
               { icon: Users, label: "Unlimited users on every plan" },
-              { icon: WifiOff, label: "Full offline mode built-in" },
               { icon: Star, label: "Review automation included" },
-              { icon: Route, label: "Route optimization included" },
+              { icon: WifiOff, label: "Offline mode (coming soon)" },
+              { icon: Route, label: "Map view with Google Maps routing" },
             ].map(({ icon: Icon, label }) => (
               <div key={label} className="flex items-center gap-2 text-sm text-zinc-400">
                 <Icon size={16} className="text-orange-500" />

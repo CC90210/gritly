@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Receipt, Loader2, AlertCircle, Phone } from "lucide-react";
+import { Receipt, Loader2, AlertCircle, CreditCard } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 interface PortalInvoice {
@@ -37,6 +37,8 @@ export default function PortalInvoicesPage() {
   const router = useRouter();
   const [invoices, setInvoices] = useState<PortalInvoice[]>([]);
   const [loading, setLoading] = useState(true);
+  const [payingId, setPayingId] = useState<string | null>(null);
+  const [payError, setPayError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/portal/invoices")
@@ -48,6 +50,29 @@ export default function PortalInvoicesPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [router]);
+
+  async function handlePayNow(invoiceId: string) {
+    setPayingId(invoiceId);
+    setPayError(null);
+    try {
+      const res = await fetch("/api/payments/create-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoiceId }),
+      });
+      if (res.ok) {
+        const data = await res.json() as { url: string };
+        window.location.href = data.url;
+      } else {
+        const err = await res.json() as { error?: string };
+        setPayError(err.error ?? "Unable to open payment. Please try again.");
+        setPayingId(null);
+      }
+    } catch {
+      setPayError("Unable to open payment. Please try again.");
+      setPayingId(null);
+    }
+  }
 
   const overdueCount = invoices.filter((inv) => inv.status === "overdue").length;
   const totalOwed = invoices
@@ -65,8 +90,14 @@ export default function PortalInvoicesPage() {
         <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 mb-5">
           <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
           <p className="text-sm text-red-400">
-            {overdueCount} overdue invoice{overdueCount > 1 ? "s" : ""} — please contact us to arrange payment.
+            {overdueCount} overdue invoice{overdueCount > 1 ? "s" : ""} — pay now to avoid any delays.
           </p>
+        </div>
+      )}
+
+      {payError && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 mb-5">
+          <p className="text-sm text-red-400">{payError}</p>
         </div>
       )}
 
@@ -136,11 +167,19 @@ export default function PortalInvoicesPage() {
                 </div>
 
                 {needsPayment && (
-                  <div className="mt-4 pt-4 border-t border-[#1f1f1f] flex items-center gap-3">
-                    <div className="flex items-center gap-2 text-xs text-[#6b7280]">
-                      <Phone className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                      <span>Contact us to arrange payment</span>
-                    </div>
+                  <div className="mt-4 pt-4 border-t border-[#1f1f1f]">
+                    <button
+                      onClick={() => handlePayNow(inv.id)}
+                      disabled={payingId === inv.id}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-400 text-white text-sm font-semibold transition-colors disabled:opacity-60"
+                    >
+                      {payingId === inv.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <CreditCard className="w-4 h-4" />
+                      )}
+                      {payingId === inv.id ? "Opening payment..." : "Pay Now"}
+                    </button>
                   </div>
                 )}
               </div>

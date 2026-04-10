@@ -7,6 +7,7 @@ import { useOrgStore } from "@/lib/store/org";
 import {
   ArrowLeft, Loader2, Pencil, X, Check,
   FileText, Briefcase, Receipt, Phone, Mail, Building2,
+  MessageSquare, Mail as MailIcon, PhoneCall, StickyNote, Trash2, Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
@@ -25,8 +26,16 @@ interface ClientDetail {
 interface QuoteRow { id: string; quoteNumber: string; total: number; status: string; createdAt: string }
 interface JobRow { id: string; jobNumber: string; title: string; status: string; scheduledStart: string | null }
 interface InvoiceRow { id: string; invoiceNumber: string; total: number; status: string; dueDate: string | null }
+interface CommunicationRow {
+  id: string;
+  type: string;
+  direction: string;
+  subject: string | null;
+  body: string;
+  createdAt: string;
+}
 
-type Tab = "overview" | "quotes" | "jobs" | "invoices";
+type Tab = "overview" | "quotes" | "jobs" | "invoices" | "comms";
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "text-[#6b7280] bg-[#1f1f1f]",
@@ -73,7 +82,17 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [quotes, setQuotes] = useState<QuoteRow[]>([]);
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
+  const [comms, setComms] = useState<CommunicationRow[]>([]);
   const [tabLoading, setTabLoading] = useState(false);
+
+  // Add note modal
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [noteType, setNoteType] = useState("note");
+  const [noteSubject, setNoteSubject] = useState("");
+  const [noteBody, setNoteBody] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteError, setNoteError] = useState<string | null>(null);
+  const [deletingCommId, setDeletingCommId] = useState<string | null>(null);
 
   // Cache for tab data — only fetch each tab once per page load
   const tabCache = useRef<Partial<Record<Tab, true>>>({});
@@ -101,6 +120,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       quotes: `/api/quotes?clientId=${id}`,
       jobs: `/api/jobs?clientId=${id}`,
       invoices: `/api/invoices?clientId=${id}`,
+      comms: `/api/communications?clientId=${id}`,
     };
 
     fetch(endpoints[activeTab])
@@ -109,6 +129,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         if (activeTab === "quotes") setQuotes(Array.isArray(d) ? d : []);
         if (activeTab === "jobs") setJobs(Array.isArray(d) ? d : []);
         if (activeTab === "invoices") setInvoices(Array.isArray(d) ? d : []);
+        if (activeTab === "comms") setComms(Array.isArray(d) ? d : []);
       })
       .catch(() => {
         // Reset cache entry on failure so user can retry by switching tabs
@@ -167,15 +188,140 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     );
   }
 
+  async function saveNote() {
+    if (!noteBody.trim()) return;
+    setNoteSaving(true);
+    setNoteError(null);
+    try {
+      const res = await fetch("/api/communications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: id,
+          type: noteType,
+          direction: "outbound",
+          subject: noteSubject.trim() || undefined,
+          body: noteBody.trim(),
+        }),
+      });
+      if (res.ok) {
+        const newComm = await res.json() as CommunicationRow;
+        setComms((prev) => [newComm, ...prev]);
+        setShowNoteModal(false);
+        setNoteBody("");
+        setNoteSubject("");
+        setNoteType("note");
+        // Reset cache so next tab switch re-fetches
+        delete tabCache.current["comms"];
+      } else {
+        const err = await res.json() as { error?: string };
+        setNoteError(err.error ?? "Failed to save. Please try again.");
+      }
+    } catch {
+      setNoteError("Failed to save. Please try again.");
+    } finally {
+      setNoteSaving(false);
+    }
+  }
+
+  async function deleteComm(commId: string) {
+    setDeletingCommId(commId);
+    try {
+      await fetch(`/api/communications/${commId}`, { method: "DELETE" });
+      setComms((prev) => prev.filter((c) => c.id !== commId));
+    } catch {
+      // Non-fatal: UI stays consistent
+    } finally {
+      setDeletingCommId(null);
+    }
+  }
+
   const TABS: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { key: "overview", label: "Overview", icon: FileText },
     { key: "quotes", label: "Quotes", icon: FileText },
     { key: "jobs", label: industryConfig?.terminology.jobPlural ?? "Jobs", icon: Briefcase },
     { key: "invoices", label: "Invoices", icon: Receipt },
+    { key: "comms", label: "Comms", icon: MessageSquare },
   ];
+
+  const COMM_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+    email: MailIcon,
+    sms: MessageSquare,
+    phone: PhoneCall,
+    note: StickyNote,
+  };
 
   return (
     <div className="max-w-3xl mx-auto">
+      {/* Add Note modal */}
+      {showNoteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowNoteModal(false)} />
+          <div className="relative bg-[#111111] border border-[#1f1f1f] rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-white font-semibold">Add Communication</h3>
+              <button onClick={() => setShowNoteModal(false)} className="text-[#6b7280] hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-[#9ca3af] mb-1.5">Type</label>
+                <select
+                  value={noteType}
+                  onChange={(e) => setNoteType(e.target.value)}
+                  className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+                >
+                  <option value="note">Note</option>
+                  <option value="email">Email</option>
+                  <option value="sms">SMS</option>
+                  <option value="phone">Phone Call</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#9ca3af] mb-1.5">Subject (optional)</label>
+                <input
+                  type="text"
+                  value={noteSubject}
+                  onChange={(e) => setNoteSubject(e.target.value)}
+                  placeholder="Subject..."
+                  className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-[#4b5563] focus:outline-none focus:border-orange-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#9ca3af] mb-1.5">Notes</label>
+                <textarea
+                  value={noteBody}
+                  onChange={(e) => setNoteBody(e.target.value)}
+                  rows={4}
+                  placeholder="What happened..."
+                  className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-[#4b5563] focus:outline-none focus:border-orange-500 resize-none"
+                />
+              </div>
+              {noteError && (
+                <p className="text-xs text-red-400">{noteError}</p>
+              )}
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={saveNote}
+                disabled={noteSaving || !noteBody.trim()}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-colors bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-50"
+              >
+                {noteSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                Save
+              </button>
+              <button
+                onClick={() => setShowNoteModal(false)}
+                className="px-4 py-2.5 rounded-xl text-sm font-semibold text-[#9ca3af] bg-[#1f1f1f] hover:bg-[#2a2a2a] transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-3 mb-6">
         <Link href="/dash/clients" className="text-[#6b7280] hover:text-white transition-colors">
           <ArrowLeft className="w-5 h-5" />
@@ -449,6 +595,82 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Communications tab */}
+      {activeTab === "comms" && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-[#6b7280]">{comms.length} entries</p>
+            <button
+              onClick={() => setShowNoteModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Note
+            </button>
+          </div>
+          {tabLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-5 h-5 text-orange-500 animate-spin" />
+            </div>
+          ) : comms.length === 0 ? (
+            <div className="bg-[#111111] border border-[#1f1f1f] rounded-2xl text-center py-12">
+              <MessageSquare className="w-8 h-8 text-[#4b5563] mx-auto mb-3" />
+              <p className="text-[#6b7280] text-sm">No communications logged yet.</p>
+              <button
+                onClick={() => setShowNoteModal(true)}
+                className="text-orange-500 text-sm mt-2 inline-block hover:underline"
+              >
+                Add the first note
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {comms.map((comm) => {
+                const TypeIcon = COMM_TYPE_ICONS[comm.type] ?? StickyNote;
+                return (
+                  <div
+                    key={comm.id}
+                    className="bg-[#111111] border border-[#1f1f1f] rounded-2xl p-4 flex items-start gap-3"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <TypeIcon className="w-4 h-4 text-orange-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                        <span className="text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">
+                          {comm.type}
+                        </span>
+                        <span className="text-xs text-[#4b5563]">·</span>
+                        <span className="text-xs text-[#4b5563] capitalize">{comm.direction}</span>
+                        <span className="text-xs text-[#4b5563]">·</span>
+                        <span className="text-xs text-[#4b5563]">
+                          {new Date(comm.createdAt).toLocaleDateString()} {new Date(comm.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </div>
+                      {comm.subject && (
+                        <p className="text-sm font-semibold text-white mb-0.5">{comm.subject}</p>
+                      )}
+                      <p className="text-sm text-[#9ca3af] whitespace-pre-wrap break-words">{comm.body}</p>
+                    </div>
+                    <button
+                      onClick={() => deleteComm(comm.id)}
+                      disabled={deletingCommId === comm.id}
+                      className="text-[#4b5563] hover:text-red-400 transition-colors flex-shrink-0"
+                    >
+                      {deletingCommId === comm.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
