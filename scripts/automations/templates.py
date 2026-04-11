@@ -186,7 +186,7 @@ def quote_template(
         Quote Reference
       </p>
       <p style="margin: 0; font-size: 18px; font-weight: 700; color: #111827;">
-        {quote_number}
+        {_esc(quote_number)}
       </p>
     </div>
 
@@ -252,7 +252,7 @@ def quote_approved_template(
           </td>
           <td style="font-size: 13px; color: #111827; font-weight: 600;
                      text-align: right; padding-bottom: 6px;">
-            {quote_number}
+            {_esc(quote_number)}
           </td>
         </tr>
         <tr>
@@ -277,7 +277,7 @@ def quote_approved_template(
           <td style="font-size: 13px; color: #6b7280;">Approved At</td>
           <td style="font-size: 13px; color: #111827; font-weight: 500;
                      text-align: right;">
-            {approved_at}
+            {_esc(approved_at)}
           </td>
         </tr>
       </table>
@@ -331,7 +331,7 @@ def invoice_template(
     content = f"""
     <h2 style="margin: 0 0 6px; font-size: 22px; font-weight: 700;
                color: #111827; letter-spacing: -0.02em;">
-      Invoice {invoice_number}
+      Invoice {_esc(invoice_number)}
     </h2>
     <p style="margin: 0 0 24px; font-size: 15px; color: #6b7280;">
       Hi {_esc(client_name)} — thank you for choosing {_esc(business_name)}.
@@ -406,7 +406,7 @@ def payment_received_template(
           </td>
           <td style="font-size: 13px; color: #111827; font-weight: 600;
                      text-align: right; padding-bottom: 8px;">
-            {invoice_number}
+            {_esc(invoice_number)}
           </td>
         </tr>
         <tr>
@@ -422,7 +422,7 @@ def payment_received_template(
           <td style="font-size: 13px; color: #6b7280;">Date</td>
           <td style="font-size: 13px; color: #111827; font-weight: 500;
                      text-align: right;">
-            {paid_at}
+            {_esc(paid_at)}
           </td>
         </tr>
       </table>
@@ -688,7 +688,7 @@ def booking_confirmation_template(
         <tr>
           <td style="font-size: 13px; color: #6b7280;">Reference</td>
           <td style="font-size: 13px; color: #9ca3af; font-family: monospace;
-                     text-align: right;">{reference_number}</td>
+                     text-align: right;">{_esc(reference_number)}</td>
         </tr>
       </table>
     </div>
@@ -735,7 +735,7 @@ def quote_followup_template(
           </td>
           <td style="font-size: 13px; color: #111827; font-weight: 600;
                      text-align: right; padding-bottom: 8px;">
-            {quote_number}
+            {_esc(quote_number)}
           </td>
         </tr>
         <tr>
@@ -752,7 +752,7 @@ def quote_followup_template(
       Review Quote
     </a>
     &nbsp;&nbsp;
-    <a href="mailto:?subject=Question about {quote_number}"
+    <a href="mailto:?subject=Question about {_esc(quote_number)}"
        style="{_SECONDARY_BUTTON_STYLE}">
       Ask a Question
     </a>

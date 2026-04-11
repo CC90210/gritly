@@ -17,7 +17,7 @@ import sys
 import os
 import argparse
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import libsql_experimental as libsql
 from dotenv import load_dotenv
@@ -35,7 +35,9 @@ def get_db() -> libsql.Connection:
         raise EnvironmentError(
             "TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set in .env.local"
         )
-    return libsql.connect(url, auth_token=token)
+    conn = libsql.connect(url, auth_token=token)
+    conn.sync()
+    return conn
 
 
 def _build_email_service() -> GritlyEmailService | None:
@@ -57,12 +59,18 @@ def run(org_id: str | None = None) -> None:
     db = get_db()
     email_svc = _build_email_service()
 
+    # Only look at jobs scheduled in the next 30 days (+ already-past jobs within 24h)
+    # This bounds the query and prevents scanning the entire jobs table on large DBs.
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    window_start_ts = now_ts - 86400  # 24 hours back (catch jobs scheduled just before cron ran)
+    window_end_ts = now_ts + 30 * 86400  # 30 days ahead
+
     cc_email = os.getenv("CC_EMAIL") or os.getenv("FROM_EMAIL")
 
     if org_id:
         orgs = db.execute("SELECT id, name FROM organizations WHERE id = ?", [org_id]).rows
     else:
-        orgs = db.execute("SELECT id, name FROM organizations").rows
+        orgs = db.execute("SELECT id, name FROM organizations LIMIT 500").rows
 
     total_sent = 0
     total_skipped = 0
@@ -83,8 +91,11 @@ def run(org_id: str | None = None) -> None:
                 LEFT JOIN properties p ON p.id = j.property_id
                 WHERE j.org_id = ?
                   AND j.status = 'scheduled'
+                  AND (j.scheduled_start IS NULL
+                       OR (j.scheduled_start >= ? AND j.scheduled_start <= ?))
+                LIMIT 200
                 """,
-                [current_org_id],
+                [current_org_id, window_start_ts, window_end_ts],
             ).rows
 
             org_sent = 0
@@ -159,6 +170,7 @@ def run(org_id: str | None = None) -> None:
                         comm_body,
                     ],
                 )
+                db.commit()
 
                 # Send email to client
                 if client_email and email_svc:

@@ -35,7 +35,9 @@ def get_db() -> libsql.Connection:
         raise EnvironmentError(
             "TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set in .env.local"
         )
-    return libsql.connect(url, auth_token=token)
+    conn = libsql.connect(url, auth_token=token)
+    conn.sync()
+    return conn
 
 
 def _build_email_service() -> GritlyEmailService | None:
@@ -74,7 +76,7 @@ def run(org_id: str | None = None) -> None:
     if org_id:
         orgs = db.execute("SELECT id, name FROM organizations WHERE id = ?", [org_id]).rows
     else:
-        orgs = db.execute("SELECT id, name FROM organizations").rows
+        orgs = db.execute("SELECT id, name FROM organizations LIMIT 500").rows
 
     for org in orgs:
         current_org_id: str = org[0]

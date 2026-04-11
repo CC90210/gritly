@@ -34,7 +34,9 @@ def get_db() -> libsql.Connection:
         raise EnvironmentError(
             "TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set in .env.local"
         )
-    return libsql.connect(url, auth_token=token)
+    conn = libsql.connect(url, auth_token=token)
+    conn.sync()
+    return conn
 
 
 def run(org_id: str | None = None) -> None:
@@ -49,7 +51,7 @@ def run(org_id: str | None = None) -> None:
     if org_id:
         orgs = db.execute("SELECT id, name FROM organizations WHERE id = ?", [org_id]).rows
     else:
-        orgs = db.execute("SELECT id, name FROM organizations").rows
+        orgs = db.execute("SELECT id, name FROM organizations LIMIT 500").rows
 
     total_reminders = 0
 
@@ -68,6 +70,7 @@ def run(org_id: str | None = None) -> None:
                   AND end_date IS NOT NULL
                   AND end_date >= ?
                   AND end_date <= ?
+                LIMIT 200
                 """,
                 [current_org_id, today_str, window_end_str],
             ).rows
@@ -134,6 +137,7 @@ def run(org_id: str | None = None) -> None:
                         body,
                     ],
                 )
+                db.commit()
 
                 org_count += 1
                 print(

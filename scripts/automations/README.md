@@ -39,11 +39,18 @@ TWILIO_AUTH_TOKEN=your-twilio-auth-token
 TWILIO_FROM_NUMBER=+14155551234
 ```
 
-For the daily digest email (when SendGrid is wired up):
+For email delivery (Gmail SMTP with an App Password):
 
 ```
-SENDGRID_API_KEY=SG.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-DIGEST_EMAIL_TO=owner@yourbusiness.com
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=you@gmail.com
+SMTP_PASSWORD=your-app-password
+FROM_NAME=Your Business Name
+FROM_EMAIL=you@gmail.com
+CC_EMAIL=you@gmail.com          # CC'd on every outbound client email
+DIGEST_EMAIL_TO=owner@yourbusiness.com  # daily digest recipient
+APP_URL=https://gritly.vercel.app       # base URL for portal links in emails
 ```
 
 ---
@@ -113,10 +120,21 @@ python scripts/automations/missed_call_textback.py --org-id <id> --phone {{$json
 
 ---
 
+## Hardening Notes
+
+- All DB writes call `db.commit()` immediately after each INSERT/UPDATE so data is not lost on crash.
+- Connections call `conn.sync()` on open to pull latest remote state before querying.
+- All `SELECT` queries without a narrow WHERE clause are bounded with `LIMIT` to prevent unbounded scans.
+- `booking_confirmation.py` scopes its job query to a 30-day lookahead window so it never re-scans historical scheduled jobs.
+- All user-provided strings in email templates are HTML-escaped via `_esc()` to prevent XSS.
+- Each script is idempotent: running it twice will not double-send (dedup via `communications` table or `review_requests` table).
+- Missing SMTP credentials → stub mode (logs to stdout, does not crash).
+- Missing Twilio credentials → stub mode (logs to stdout, does not crash).
+- Exit code 1 from `run_all.py` when any step fails, so cron can detect failures.
+
 ## Future Integrations
 
 | Feature | Package | Env Vars needed |
 |---|---|---|
 | SMS delivery | `twilio` | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` |
-| Email delivery | `sendgrid` | `SENDGRID_API_KEY`, `DIGEST_EMAIL_TO` |
 | Slack alerts | `slack-sdk` | `SLACK_BOT_TOKEN`, `SLACK_CHANNEL_ID` |

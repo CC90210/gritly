@@ -33,7 +33,9 @@ def get_db() -> libsql.Connection:
         raise EnvironmentError(
             "TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set in .env.local"
         )
-    return libsql.connect(url, auth_token=token)
+    conn = libsql.connect(url, auth_token=token)
+    conn.sync()
+    return conn
 
 
 def _build_email_service() -> GritlyEmailService | None:
@@ -57,7 +59,7 @@ def run(org_id: str | None = None) -> None:
     if org_id:
         orgs = db.execute("SELECT id, name FROM organizations WHERE id = ?", [org_id]).rows
     else:
-        orgs = db.execute("SELECT id, name FROM organizations").rows
+        orgs = db.execute("SELECT id, name FROM organizations LIMIT 500").rows
 
     total_created = 0
     total_skipped = 0
@@ -76,6 +78,7 @@ def run(org_id: str | None = None) -> None:
                 WHERE j.org_id = ?
                   AND j.status = 'completed'
                   AND j.completed_at >= ?
+                LIMIT 200
                 """,
                 [current_org_id, cutoff_ts],
             ).rows
@@ -118,6 +121,7 @@ def run(org_id: str | None = None) -> None:
                     """,
                     [new_id, now_ts, current_org_id, client_id, job_id, "email", "pending"],
                 )
+                db.commit()
 
                 # Send email if client has an address and email service is ready
                 if client_email and email_svc:
@@ -140,6 +144,7 @@ def run(org_id: str | None = None) -> None:
                             "UPDATE review_requests SET status = 'sent' WHERE id = ?",
                             [new_id],
                         )
+                        db.commit()
                         print(
                             f"  [SENT] Review request email for job {job_number} "
                             f"→ {client_email}"

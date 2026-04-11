@@ -22,7 +22,6 @@ How to wire this up:
   3. This script handles the DB write and SMS send.
 """
 
-import sys
 import os
 import uuid
 import argparse
@@ -41,7 +40,9 @@ def get_db() -> libsql.Connection:
         raise EnvironmentError(
             "TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set in .env.local"
         )
-    return libsql.connect(url, auth_token=token)
+    conn = libsql.connect(url, auth_token=token)
+    conn.sync()
+    return conn
 
 
 def _send_sms(to_number: str, body: str) -> None:
@@ -114,6 +115,7 @@ def process_missed_call(phone_number: str, org_id: str) -> str:
             "missed_call",
         ],
     )
+    db.commit()
 
     print(f"[CREATED] Service request {new_id} for missed call from {phone_number} (org: {org_name})")
 
