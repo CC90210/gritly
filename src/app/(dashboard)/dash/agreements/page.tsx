@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { FileCheck, Plus, X, Loader2, RefreshCw, AlertCircle, Search } from "lucide-react";
+import { useToast } from "@/lib/hooks/useToast";
+import { ToastContainer } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 
 interface Agreement {
@@ -50,6 +52,7 @@ export default function AgreementsPage() {
   const clientAbortRef = useRef<AbortController | null>(null);
   // Map of clientId → display name for the agreements table
   const [clientNames, setClientNames] = useState<Map<string, string>>(new Map());
+  const { toasts, dismiss, success: toastSuccess, error: toastError } = useToast();
 
   const [form, setForm] = useState({
     name: "",
@@ -142,6 +145,7 @@ export default function AgreementsPage() {
       setSelectedClient(null);
       setClientSearch("");
       setForm({ name: "", frequency: "monthly", price: "", startDate: new Date().toLocaleDateString("en-CA"), endDate: "", notes: "" });
+      toastSuccess("Agreement created");
     } catch {
       setError("Network error.");
     } finally {
@@ -161,9 +165,12 @@ export default function AgreementsPage() {
         setAgreements((prev) =>
           prev.map((a) => a.id === agreement.id ? { ...a, isActive: !a.isActive } : a)
         );
+        toastSuccess(agreement.isActive ? "Agreement deactivated" : "Agreement activated");
+      } else {
+        toastError("Failed to update. Please try again.");
       }
     } catch {
-      // silently fail — button re-enables
+      toastError("Network error. Please try again.");
     } finally {
       setTogglingId(null);
     }
@@ -178,14 +185,15 @@ export default function AgreementsPage() {
 
   return (
     <div>
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4">
           <div className="absolute inset-0 bg-black/60" onClick={() => { setShowModal(false); setError(null); }} />
-          <div className="relative bg-[#111111] border border-[#1f1f1f] rounded-2xl p-6 w-full max-w-md shadow-2xl">
+          <div className="relative bg-[#111111] border border-[#1f1f1f] rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-white font-semibold">New Agreement</h3>
-              <button onClick={() => { setShowModal(false); setError(null); }} className="text-[#6b7280] hover:text-white">
+              <button onClick={() => { setShowModal(false); setError(null); }} className="text-[#6b7280] hover:text-white" aria-label="Close">
                 <X className="w-5 h-5" />
               </button>
             </div>

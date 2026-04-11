@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { BookOpen, Plus, X, Pencil, Trash2, Loader2, AlertCircle } from "lucide-react";
+import { useToast } from "@/lib/hooks/useToast";
+import { ToastContainer } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 
 interface ServiceItem {
@@ -33,6 +35,7 @@ export default function PricebookPage() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { toasts, dismiss, success: toastSuccess } = useToast();
 
   const [form, setForm] = useState({
     name: "",
@@ -112,6 +115,7 @@ export default function PricebookPage() {
         if (!res.ok) { const d = await res.json().catch(() => ({})); setError((d as { error?: string }).error ?? "Failed."); return; }
         const updated = await res.json() as ServiceItem;
         setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+        toastSuccess("Service updated");
       } else {
         const res = await fetch("/api/service-items", {
           method: "POST",
@@ -121,6 +125,7 @@ export default function PricebookPage() {
         if (!res.ok) { const d = await res.json().catch(() => ({})); setError((d as { error?: string }).error ?? "Failed."); return; }
         const created = await res.json() as ServiceItem;
         setItems((prev) => [created, ...prev]);
+        toastSuccess("Service added");
       }
       setShowModal(false);
     } catch {
@@ -137,6 +142,7 @@ export default function PricebookPage() {
       const res = await fetch(`/api/service-items?id=${id}`, { method: "DELETE" });
       if (res.ok) {
         setItems((prev) => prev.filter((i) => i.id !== id));
+        toastSuccess("Service deleted");
       } else {
         setFetchError(true);
       }
@@ -152,14 +158,15 @@ export default function PricebookPage() {
 
   return (
     <div>
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
       {/* Add/Edit modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4">
           <div className="absolute inset-0 bg-black/60" onClick={() => setShowModal(false)} />
-          <div className="relative bg-[#111111] border border-[#1f1f1f] rounded-2xl p-6 w-full max-w-md shadow-2xl">
+          <div className="relative bg-[#111111] border border-[#1f1f1f] rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-white font-semibold">{editItem ? "Edit Service" : "Add Service"}</h3>
-              <button onClick={() => setShowModal(false)} className="text-[#6b7280] hover:text-white">
+              <button onClick={() => setShowModal(false)} className="text-[#6b7280] hover:text-white" aria-label="Close">
                 <X className="w-5 h-5" />
               </button>
             </div>

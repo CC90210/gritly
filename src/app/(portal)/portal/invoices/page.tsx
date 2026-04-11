@@ -37,6 +37,7 @@ export default function PortalInvoicesPage() {
   const router = useRouter();
   const [invoices, setInvoices] = useState<PortalInvoice[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [payingId, setPayingId] = useState<string | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
 
@@ -47,7 +48,7 @@ export default function PortalInvoicesPage() {
         return r.json() as Promise<PortalInvoice[]>;
       })
       .then((d) => { if (d) setInvoices(Array.isArray(d) ? d : []); })
-      .catch(() => {})
+      .catch(() => setFetchError(true))
       .finally(() => setLoading(false));
   }, [router]);
 
@@ -104,6 +105,11 @@ export default function PortalInvoicesPage() {
       {loading ? (
         <div className="flex items-center justify-center min-h-[300px]">
           <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
+        </div>
+      ) : fetchError ? (
+        <div className="flex flex-col items-center justify-center min-h-[300px] text-center">
+          <AlertCircle className="w-8 h-8 text-red-400 mb-3" />
+          <p className="text-sm text-[#9ca3af]">Failed to load invoices. Please refresh the page.</p>
         </div>
       ) : invoices.length === 0 ? (
         <div className="flex flex-col items-center justify-center min-h-[300px] text-center">

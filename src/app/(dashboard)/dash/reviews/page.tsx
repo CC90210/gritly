@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Star, Plus, Loader2, X, Search, AlertCircle } from "lucide-react";
+import { useToast } from "@/lib/hooks/useToast";
+import { ToastContainer } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 
 interface ReviewRequest {
@@ -59,6 +61,7 @@ export default function ReviewsPage() {
   const [clientLoading, setClientLoading] = useState(false);
   const [platform, setPlatform] = useState("google");
   const clientAbortRef = useRef<AbortController | null>(null);
+  const { toasts, dismiss, success: toastSuccess } = useToast();
 
   useEffect(() => {
     loadReviews();
@@ -124,7 +127,6 @@ export default function ReviewsPage() {
       }
       const created = await res.json() as ReviewRequest;
       setReviews((prev) => [created, ...prev]);
-      // Update client map with the new client if needed
       setClientMap((prev) => {
         const next = new Map(prev);
         next.set(selectedClient.id, `${selectedClient.firstName} ${selectedClient.lastName}`);
@@ -133,6 +135,7 @@ export default function ReviewsPage() {
       setShowModal(false);
       setSelectedClient(null);
       setClientSearch("");
+      toastSuccess("Review request sent");
     } catch {
       setError("Network error.");
     } finally {
@@ -142,13 +145,14 @@ export default function ReviewsPage() {
 
   return (
     <div>
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4">
           <div className="absolute inset-0 bg-black/60" onClick={() => setShowModal(false)} />
-          <div className="relative bg-[#111111] border border-[#1f1f1f] rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+          <div className="relative bg-[#111111] border border-[#1f1f1f] rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-sm shadow-2xl">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-white font-semibold">Send Review Request</h3>
-              <button onClick={() => setShowModal(false)} className="text-[#6b7280] hover:text-white">
+              <button onClick={() => setShowModal(false)} className="text-[#6b7280] hover:text-white" aria-label="Close">
                 <X className="w-5 h-5" />
               </button>
             </div>

@@ -281,7 +281,8 @@ export function DashboardShell({
           <aside className="relative w-56 bg-[#0d0d0d] border-r border-[#1f2937] flex flex-col z-10">
             <button
               onClick={() => setMobileOpen(false)}
-              className="absolute top-4 right-3 text-[#6b7280] hover:text-white"
+              className="absolute top-4 right-3 text-[#6b7280] hover:text-white min-w-[44px] min-h-[44px] flex items-center justify-center"
+              aria-label="Close navigation menu"
             >
               <X className="w-5 h-5" />
             </button>
@@ -296,7 +297,8 @@ export function DashboardShell({
         <header className="h-14 border-b border-[#1f2937] flex items-center px-4 gap-3 shrink-0 bg-[#0d0d0d]">
           <button
             onClick={() => setMobileOpen(true)}
-            className="lg:hidden text-[#6b7280] hover:text-white"
+            className="lg:hidden text-[#6b7280] hover:text-white min-w-[44px] min-h-[44px] flex items-center justify-center"
+            aria-label="Open navigation menu"
           >
             <Menu className="w-5 h-5" />
           </button>

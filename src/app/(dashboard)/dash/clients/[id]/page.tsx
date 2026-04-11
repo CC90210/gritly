@@ -8,8 +8,11 @@ import {
   ArrowLeft, Loader2, Pencil, X, Check,
   FileText, Briefcase, Receipt, Phone, Mail, Building2,
   MessageSquare, Mail as MailIcon, PhoneCall, StickyNote, Trash2, Plus,
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { useToast } from "@/lib/hooks/useToast";
+import { ToastContainer } from "@/components/ui/Toast";
 
 interface ClientDetail {
   id: string;
@@ -70,9 +73,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const router = useRouter();
   const { industryConfig } = useOrgStore();
   const labelSingular = industryConfig?.terminology.client ?? "Client";
+  const { toasts, dismiss, success, error: toastError } = useToast();
 
   const [client, setClient] = useState<ClientDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<ClientDetail>>({});
@@ -99,18 +104,22 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
   useEffect(() => {
     fetch(`/api/clients/${id}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (r.status === 401) { router.push("/login"); throw new Error("401"); }
+        if (r.status === 404) throw new Error("404");
+        if (!r.ok) throw new Error("Failed");
+        return r.json();
+      })
       .then((d: ClientDetail) => {
         setClient(d);
         setEditForm(d);
       })
-      .catch(() => {})
+      .catch(() => setFetchError(true))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, router]);
 
   useEffect(() => {
     if (activeTab === "overview") return;
-    // Skip if already fetched
     if (tabCache.current[activeTab]) return;
 
     setTabLoading(true);
@@ -132,7 +141,6 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         if (activeTab === "comms") setComms(Array.isArray(d) ? d : []);
       })
       .catch(() => {
-        // Reset cache entry on failure so user can retry by switching tabs
         delete tabCache.current[activeTab];
       })
       .finally(() => setTabLoading(false));
@@ -159,6 +167,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         const updated = await res.json() as ClientDetail;
         setClient(updated);
         setEditing(false);
+        success("Client saved");
       } else {
         setSaveError("Failed to save. Please try again.");
       }
@@ -177,11 +186,17 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     );
   }
 
-  if (!client) {
+  if (fetchError || !client) {
     return (
-      <div className="text-center py-20">
-        <p className="text-[#6b7280]">{labelSingular} not found.</p>
-        <Link href="/dash/clients" className="text-orange-500 text-sm mt-2 inline-block">
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+        <AlertCircle className="w-8 h-8 text-red-400 mb-3" />
+        <p className="text-white font-medium mb-1">{labelSingular} not found</p>
+        <p className="text-sm text-[#6b7280] mb-4">This record may not exist or you may not have access.</p>
+        <Link
+          href="/dash/clients"
+          className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-xl px-4 py-2 text-sm transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
           Back to {industryConfig?.terminology.clientPlural ?? "Clients"}
         </Link>
       </div>
@@ -211,8 +226,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         setNoteBody("");
         setNoteSubject("");
         setNoteType("note");
-        // Reset cache so next tab switch re-fetches
         delete tabCache.current["comms"];
+        success("Note saved");
       } else {
         const err = await res.json() as { error?: string };
         setNoteError(err.error ?? "Failed to save. Please try again.");
@@ -225,12 +240,18 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   }
 
   async function deleteComm(commId: string) {
+    if (!window.confirm("Delete this communication log? This cannot be undone.")) return;
     setDeletingCommId(commId);
     try {
-      await fetch(`/api/communications/${commId}`, { method: "DELETE" });
-      setComms((prev) => prev.filter((c) => c.id !== commId));
+      const res = await fetch(`/api/communications/${commId}`, { method: "DELETE" });
+      if (res.ok) {
+        setComms((prev) => prev.filter((c) => c.id !== commId));
+        success("Entry deleted");
+      } else {
+        toastError("Failed to delete. Please try again.");
+      }
     } catch {
-      // Non-fatal: UI stays consistent
+      toastError("Network error. Please try again.");
     } finally {
       setDeletingCommId(null);
     }
@@ -253,24 +274,27 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="max-w-3xl mx-auto">
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
+
       {/* Add Note modal */}
       {showNoteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4">
           <div className="absolute inset-0 bg-black/60" onClick={() => setShowNoteModal(false)} />
-          <div className="relative bg-[#111111] border border-[#1f1f1f] rounded-2xl p-6 w-full max-w-md shadow-2xl">
+          <div className="relative bg-[#111111] border border-[#1f1f1f] rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-md shadow-2xl">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-white font-semibold">Add Communication</h3>
-              <button onClick={() => setShowNoteModal(false)} className="text-[#6b7280] hover:text-white">
+              <button onClick={() => setShowNoteModal(false)} className="text-[#6b7280] hover:text-white" aria-label="Close">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-[#9ca3af] mb-1.5">Type</label>
+                <label htmlFor="note-type" className="block text-xs font-medium text-[#9ca3af] mb-1.5">Type</label>
                 <select
+                  id="note-type"
                   value={noteType}
                   onChange={(e) => setNoteType(e.target.value)}
-                  className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+                  className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
                 >
                   <option value="note">Note</option>
                   <option value="email">Email</option>
@@ -279,23 +303,25 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-[#9ca3af] mb-1.5">Subject (optional)</label>
+                <label htmlFor="note-subject" className="block text-xs font-medium text-[#9ca3af] mb-1.5">Subject (optional)</label>
                 <input
+                  id="note-subject"
                   type="text"
                   value={noteSubject}
                   onChange={(e) => setNoteSubject(e.target.value)}
                   placeholder="Subject..."
-                  className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-[#4b5563] focus:outline-none focus:border-orange-500"
+                  className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-[#4b5563] focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-[#9ca3af] mb-1.5">Notes</label>
+                <label htmlFor="note-body" className="block text-xs font-medium text-[#9ca3af] mb-1.5">Notes *</label>
                 <textarea
+                  id="note-body"
                   value={noteBody}
                   onChange={(e) => setNoteBody(e.target.value)}
                   rows={4}
                   placeholder="What happened..."
-                  className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-[#4b5563] focus:outline-none focus:border-orange-500 resize-none"
+                  className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-[#4b5563] focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 resize-none"
                 />
               </div>
               {noteError && (
@@ -306,14 +332,14 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               <button
                 onClick={saveNote}
                 disabled={noteSaving || !noteBody.trim()}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-colors bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-50"
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-colors bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-orange-500"
               >
                 {noteSaving && <Loader2 className="w-4 h-4 animate-spin" />}
                 Save
               </button>
               <button
                 onClick={() => setShowNoteModal(false)}
-                className="px-4 py-2.5 rounded-xl text-sm font-semibold text-[#9ca3af] bg-[#1f1f1f] hover:bg-[#2a2a2a] transition-colors"
+                className="px-4 py-2.5 rounded-xl text-sm font-semibold text-[#9ca3af] bg-[#1f1f1f] hover:bg-[#2a2a2a] transition-colors focus:outline-none focus:ring-2 focus:ring-[#374151]"
               >
                 Cancel
               </button>
@@ -323,38 +349,42 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       )}
 
       <div className="flex items-center gap-3 mb-6">
-        <Link href="/dash/clients" className="text-[#6b7280] hover:text-white transition-colors">
+        <Link
+          href="/dash/clients"
+          className="text-[#6b7280] hover:text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+          aria-label="Back to clients"
+        >
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <div className="flex-1">
-          <h1 className="text-xl font-semibold text-white">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-xl font-semibold text-white truncate">
             {client.firstName} {client.lastName}
           </h1>
           {client.company && (
-            <p className="text-sm text-[#6b7280] mt-0.5">{client.company}</p>
+            <p className="text-sm text-[#6b7280] mt-0.5 truncate">{client.company}</p>
           )}
         </div>
         {!editing ? (
           <button
             onClick={() => setEditing(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#111111] border border-[#1f1f1f] text-[#9ca3af] hover:text-white text-sm transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#111111] border border-[#1f1f1f] text-[#9ca3af] hover:text-white text-sm transition-colors shrink-0"
           >
             <Pencil className="w-3.5 h-3.5" />
             Edit
           </button>
         ) : (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-60"
             >
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
               Save
             </button>
             <button
-              onClick={() => { setEditing(false); setEditForm(client); }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1f1f1f] text-[#9ca3af] hover:text-white text-sm transition-colors"
+              onClick={() => { setEditing(false); setEditForm(client); setSaveError(null); }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#1f1f1f] text-[#9ca3af] hover:text-white text-sm transition-colors"
             >
               <X className="w-3.5 h-3.5" />
               Cancel
@@ -363,8 +393,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         )}
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-[#111111] border border-[#1f1f1f] rounded-xl p-1">
+      {/* Tabs — horizontally scrollable on mobile */}
+      <div className="flex gap-1 mb-6 bg-[#111111] border border-[#1f1f1f] rounded-xl p-1 overflow-x-auto">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           return (
@@ -372,13 +402,13 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex-1 justify-center",
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex-1 justify-center whitespace-nowrap min-h-[36px]",
                 activeTab === tab.key
                   ? "bg-orange-500 text-white"
                   : "text-[#6b7280] hover:text-white"
               )}
             >
-              <Icon className="w-3.5 h-3.5 hidden sm:block" />
+              <Icon className="w-3.5 h-3.5 hidden sm:block shrink-0" />
               {tab.label}
             </button>
           );
@@ -389,66 +419,73 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       {activeTab === "overview" && (
         <div className="bg-[#111111] border border-[#1f1f1f] rounded-2xl p-6 space-y-5">
           {saveError && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 text-sm text-red-400">
+            <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 text-sm text-red-400 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
               {saveError}
             </div>
           )}
           {editing ? (
             <>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-[#9ca3af] mb-1.5">First Name</label>
+                  <label htmlFor="edit-firstName" className="block text-xs font-medium text-[#9ca3af] mb-1.5">First Name</label>
                   <input
+                    id="edit-firstName"
                     type="text"
                     value={editForm.firstName ?? ""}
                     onChange={(e) => setEditForm((p) => ({ ...p, firstName: e.target.value }))}
-                    className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+                    className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[#9ca3af] mb-1.5">Last Name</label>
+                  <label htmlFor="edit-lastName" className="block text-xs font-medium text-[#9ca3af] mb-1.5">Last Name</label>
                   <input
+                    id="edit-lastName"
                     type="text"
                     value={editForm.lastName ?? ""}
                     onChange={(e) => setEditForm((p) => ({ ...p, lastName: e.target.value }))}
-                    className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+                    className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-[#9ca3af] mb-1.5">Email</label>
+                <label htmlFor="edit-email" className="block text-xs font-medium text-[#9ca3af] mb-1.5">Email</label>
                 <input
+                  id="edit-email"
                   type="email"
                   value={editForm.email ?? ""}
                   onChange={(e) => setEditForm((p) => ({ ...p, email: e.target.value }))}
-                  className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+                  className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-[#9ca3af] mb-1.5">Phone</label>
+                <label htmlFor="edit-phone" className="block text-xs font-medium text-[#9ca3af] mb-1.5">Phone</label>
                 <input
+                  id="edit-phone"
                   type="tel"
                   value={editForm.phone ?? ""}
                   onChange={(e) => setEditForm((p) => ({ ...p, phone: e.target.value }))}
-                  className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+                  className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-[#9ca3af] mb-1.5">Company</label>
+                <label htmlFor="edit-company" className="block text-xs font-medium text-[#9ca3af] mb-1.5">Company</label>
                 <input
+                  id="edit-company"
                   type="text"
                   value={editForm.company ?? ""}
                   onChange={(e) => setEditForm((p) => ({ ...p, company: e.target.value }))}
-                  className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+                  className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-[#9ca3af] mb-1.5">Notes</label>
+                <label htmlFor="edit-notes" className="block text-xs font-medium text-[#9ca3af] mb-1.5">Notes</label>
                 <textarea
+                  id="edit-notes"
                   value={editForm.notes ?? ""}
                   onChange={(e) => setEditForm((p) => ({ ...p, notes: e.target.value }))}
                   rows={3}
-                  className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500 resize-none"
+                  className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 resize-none"
                 />
               </div>
             </>
@@ -457,7 +494,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               {client.email && (
                 <div className="flex items-center gap-3">
                   <Mail className="w-4 h-4 text-[#4b5563] shrink-0" />
-                  <a href={`mailto:${client.email}`} className="text-sm text-orange-400 hover:underline">
+                  <a href={`mailto:${client.email}`} className="text-sm text-orange-400 hover:underline truncate">
                     {client.email}
                   </a>
                 </div>
@@ -607,7 +644,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             <p className="text-sm text-[#6b7280]">{comms.length} entries</p>
             <button
               onClick={() => setShowNoteModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
               <Plus className="w-3.5 h-3.5" />
               Add Note
@@ -660,7 +697,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                     <button
                       onClick={() => deleteComm(comm.id)}
                       disabled={deletingCommId === comm.id}
-                      className="text-[#4b5563] hover:text-red-400 transition-colors flex-shrink-0"
+                      className="text-[#4b5563] hover:text-red-400 transition-colors flex-shrink-0 min-w-[36px] min-h-[36px] flex items-center justify-center"
+                      aria-label="Delete this communication"
                     >
                       {deletingCommId === comm.id ? (
                         <Loader2 className="w-4 h-4 animate-spin" />

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Briefcase, Loader2 } from "lucide-react";
+import { Briefcase, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 interface PortalJob {
@@ -76,6 +76,7 @@ export default function PortalJobsPage() {
   const router = useRouter();
   const [jobs, setJobs] = useState<PortalJob[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
 
   useEffect(() => {
     fetch("/api/portal/jobs")
@@ -84,7 +85,7 @@ export default function PortalJobsPage() {
         return r.json() as Promise<PortalJob[]>;
       })
       .then((d) => { if (d) setJobs(Array.isArray(d) ? d : []); })
-      .catch(() => {})
+      .catch(() => setFetchError(true))
       .finally(() => setLoading(false));
   }, [router]);
 
@@ -98,6 +99,11 @@ export default function PortalJobsPage() {
       {loading ? (
         <div className="flex items-center justify-center min-h-[300px]">
           <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
+        </div>
+      ) : fetchError ? (
+        <div className="flex flex-col items-center justify-center min-h-[300px] text-center">
+          <AlertCircle className="w-8 h-8 text-red-400 mb-3" />
+          <p className="text-sm text-[#9ca3af]">Failed to load jobs. Please refresh the page.</p>
         </div>
       ) : jobs.length === 0 ? (
         <div className="flex flex-col items-center justify-center min-h-[300px] text-center">

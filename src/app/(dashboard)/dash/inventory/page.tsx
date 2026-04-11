@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Archive, Plus, X, Pencil, Trash2, Loader2, AlertTriangle, AlertCircle } from "lucide-react";
+import { useToast } from "@/lib/hooks/useToast";
+import { ToastContainer } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 
 interface InventoryItem {
@@ -25,6 +27,7 @@ export default function InventoryPage() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { toasts, dismiss, success: toastSuccess } = useToast();
 
   const [form, setForm] = useState({
     name: "",
@@ -112,6 +115,7 @@ export default function InventoryPage() {
         if (!res.ok) { const d = await res.json().catch(() => ({})); setError((d as { error?: string }).error ?? "Failed."); return; }
         const updated = await res.json() as InventoryItem;
         setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+        toastSuccess("Item updated");
       } else {
         const res = await fetch("/api/inventory", {
           method: "POST",
@@ -121,6 +125,7 @@ export default function InventoryPage() {
         if (!res.ok) { const d = await res.json().catch(() => ({})); setError((d as { error?: string }).error ?? "Failed."); return; }
         const created = await res.json() as InventoryItem;
         setItems((prev) => [created, ...prev]);
+        toastSuccess("Item added");
       }
       setShowModal(false);
     } catch {
@@ -137,6 +142,7 @@ export default function InventoryPage() {
       const res = await fetch(`/api/inventory?id=${id}`, { method: "DELETE" });
       if (res.ok) {
         setItems((prev) => prev.filter((i) => i.id !== id));
+        toastSuccess("Item deleted");
       } else {
         setFetchError(true);
       }
@@ -152,14 +158,15 @@ export default function InventoryPage() {
 
   return (
     <div>
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4">
           <div className="absolute inset-0 bg-black/60" onClick={() => setShowModal(false)} />
-          <div className="relative bg-[#111111] border border-[#1f1f1f] rounded-2xl p-6 w-full max-w-md shadow-2xl">
+          <div className="relative bg-[#111111] border border-[#1f1f1f] rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-white font-semibold">{editItem ? "Edit Item" : "Add Item"}</h3>
-              <button onClick={() => setShowModal(false)} className="text-[#6b7280] hover:text-white">
+              <button onClick={() => setShowModal(false)} aria-label="Close" className="text-[#6b7280] hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -401,6 +408,7 @@ export default function InventoryPage() {
                         <div className="flex items-center gap-1.5 justify-end">
                           <button
                             onClick={() => openEdit(item)}
+                            aria-label={`Edit ${item.name}`}
                             className="p-1.5 rounded-lg text-[#6b7280] hover:text-white hover:bg-[#2a2a2a] transition-colors"
                           >
                             <Pencil className="w-3.5 h-3.5" />
@@ -408,6 +416,7 @@ export default function InventoryPage() {
                           <button
                             onClick={() => handleDelete(item.id)}
                             disabled={deletingId === item.id}
+                            aria-label={`Delete ${item.name}`}
                             className="p-1.5 rounded-lg text-[#6b7280] hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
                           >
                             {deletingId === item.id ? (

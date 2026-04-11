@@ -4,7 +4,9 @@ import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useOrgStore } from "@/lib/store/org";
-import { ArrowLeft, Loader2, Send, CheckCircle, XCircle, Briefcase } from "lucide-react";
+import { ArrowLeft, Loader2, Send, CheckCircle, XCircle, Briefcase, AlertCircle } from "lucide-react";
+import { useToast } from "@/lib/hooks/useToast";
+import { ToastContainer } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 
 interface QuoteItem {
@@ -59,19 +61,22 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
 
   const [quote, setQuote] = useState<QuoteDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const { toasts, dismiss, success } = useToast();
 
   useEffect(() => {
     fetch(`/api/quotes/${id}`)
       .then((r) => {
+        if (r.status === 401) { router.push("/login"); throw new Error("401"); }
         if (!r.ok) throw new Error("Failed");
         return r.json();
       })
       .then((d: QuoteDetail) => setQuote(d))
-      .catch(() => {})
+      .catch(() => setFetchError(true))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, router]);
 
   async function patchStatus(status: string) {
     setActing(status);
@@ -85,6 +90,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
       if (res.ok) {
         const updated = await res.json() as QuoteDetail;
         setQuote((prev) => prev ? { ...prev, status: updated.status ?? status } : prev);
+        success(`Quote marked as ${status}`);
       } else {
         setSaveError("Failed to save. Please try again.");
       }
@@ -127,11 +133,14 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
     );
   }
 
-  if (!quote) {
+  if (fetchError || !quote) {
     return (
-      <div className="text-center py-20">
-        <p className="text-[#6b7280]">{quoteLabel} not found.</p>
-        <Link href="/dash/quotes" className="text-orange-500 text-sm mt-2 inline-block">
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+        <AlertCircle className="w-8 h-8 text-red-400 mb-3" />
+        <p className="text-white font-medium mb-1">{quoteLabel} not found</p>
+        <p className="text-sm text-[#6b7280] mb-4">This record may not exist or you may not have access.</p>
+        <Link href="/dash/quotes" className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-xl px-4 py-2 text-sm transition-colors">
+          <ArrowLeft className="w-4 h-4" />
           Back to {quoteLabel}s
         </Link>
       </div>
@@ -145,8 +154,9 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
 
   return (
     <div className="max-w-2xl mx-auto">
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
       <div className="flex items-center gap-3 mb-6">
-        <Link href="/dash/quotes" className="text-[#6b7280] hover:text-white transition-colors">
+        <Link href="/dash/quotes" className="text-[#6b7280] hover:text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center" aria-label="Back to quotes">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div className="flex-1">

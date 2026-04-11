@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Loader2, CheckCircle, XCircle } from "lucide-react";
+import { FileText, Loader2, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 interface PortalQuote {
@@ -35,7 +35,9 @@ export default function PortalQuotesPage() {
   const router = useRouter();
   const [quotes, setQuotes] = useState<PortalQuote[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/portal/quotes")
@@ -44,12 +46,13 @@ export default function PortalQuotesPage() {
         return r.json() as Promise<PortalQuote[]>;
       })
       .then((d) => { if (d) setQuotes(Array.isArray(d) ? d : []); })
-      .catch(() => {})
+      .catch(() => setFetchError(true))
       .finally(() => setLoading(false));
   }, [router]);
 
   async function handleAction(id: string, status: "approved" | "declined") {
     setActionId(id);
+    setActionError(null);
     try {
       // Use portal-scoped endpoint — the dashboard /api/quotes/:id route requires
       // manager role and would return 403 for client-role portal users.
@@ -65,9 +68,12 @@ export default function PortalQuotesPage() {
         setQuotes((prev) =>
           prev.map((q) => (q.id === id ? { ...q, status } : q))
         );
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setActionError((data as { error?: string }).error ?? "Failed to update quote.");
       }
     } catch {
-      // silent — UI will reflect unchanged state
+      setActionError("Network error. Please try again.");
     } finally {
       setActionId(null);
     }
@@ -80,9 +86,21 @@ export default function PortalQuotesPage() {
         <p className="text-sm text-[#6b7280] mt-0.5">{quotes.length} total</p>
       </div>
 
+      {actionError && (
+        <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 mb-5">
+          <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+          <p className="text-sm text-red-400">{actionError}</p>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center justify-center min-h-[300px]">
           <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
+        </div>
+      ) : fetchError ? (
+        <div className="flex flex-col items-center justify-center min-h-[300px] text-center">
+          <AlertCircle className="w-8 h-8 text-red-400 mb-3" />
+          <p className="text-sm text-[#9ca3af]">Failed to load quotes. Please refresh the page.</p>
         </div>
       ) : quotes.length === 0 ? (
         <div className="flex flex-col items-center justify-center min-h-[300px] text-center">

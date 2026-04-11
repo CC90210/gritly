@@ -2,7 +2,10 @@
 
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
-import { ArrowLeft, Loader2, Send, DollarSign, X, Link2, Check } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Loader2, Send, DollarSign, X, Link2, Check, AlertCircle } from "lucide-react";
+import { useToast } from "@/lib/hooks/useToast";
+import { ToastContainer } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 
 interface InvoiceItem {
@@ -64,12 +67,15 @@ const PAYMENT_METHODS = ["card", "ach", "cash", "check", "other"];
 
 export default function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
 
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  const { toasts, dismiss, success } = useToast();
 
   // Payment modal
   const [showPayModal, setShowPayModal] = useState(false);
@@ -80,14 +86,18 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
   useEffect(() => {
     fetch(`/api/invoices/${id}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (r.status === 401) { router.push("/login"); throw new Error("401"); }
+        if (!r.ok) throw new Error("Failed");
+        return r.json();
+      })
       .then((d: InvoiceDetail) => {
         setInvoice(d);
         setPayAmount(d.balanceDue.toFixed(2));
       })
-      .catch(() => {})
+      .catch(() => setFetchError(true))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, router]);
 
   async function markSent() {
     setActing("sent");
@@ -100,6 +110,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       });
       if (res.ok) {
         setInvoice((prev) => prev ? { ...prev, status: "sent" } : prev);
+        success("Invoice marked as sent");
       } else {
         setSaveError("Failed to update invoice. Please try again.");
       }
@@ -157,6 +168,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         setInvoice(updated);
         setShowPayModal(false);
         setPayNotes("");
+        success("Payment recorded");
       } else {
         setSaveError("Failed to record payment. Please try again.");
       }
@@ -175,25 +187,31 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     );
   }
 
-  if (!invoice) {
+  if (fetchError || !invoice) {
     return (
-      <div className="text-center py-20">
-        <p className="text-[#6b7280]">Invoice not found.</p>
-        <Link href="/dash/invoices" className="text-orange-500 text-sm mt-2 inline-block">Back to Invoices</Link>
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+        <AlertCircle className="w-8 h-8 text-red-400 mb-3" />
+        <p className="text-white font-medium mb-1">Invoice not found</p>
+        <p className="text-sm text-[#6b7280] mb-4">This record may not exist or you may not have access.</p>
+        <Link href="/dash/invoices" className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-xl px-4 py-2 text-sm transition-colors">
+          <ArrowLeft className="w-4 h-4" />
+          Back to Invoices
+        </Link>
       </div>
     );
   }
 
   return (
     <div className="max-w-2xl mx-auto">
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
       {/* Payment modal */}
       {showPayModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4">
           <div className="absolute inset-0 bg-black/60" onClick={() => setShowPayModal(false)} />
-          <div className="relative bg-[#111111] border border-[#1f1f1f] rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+          <div className="relative bg-[#111111] border border-[#1f1f1f] rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-sm shadow-2xl">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-white font-semibold">Record Payment</h3>
-              <button onClick={() => setShowPayModal(false)} className="text-[#6b7280] hover:text-white">
+              <button onClick={() => setShowPayModal(false)} className="text-[#6b7280] hover:text-white" aria-label="Close">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -259,7 +277,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       )}
 
       <div className="flex items-center gap-3 mb-6">
-        <Link href="/dash/invoices" className="text-[#6b7280] hover:text-white transition-colors">
+        <Link href="/dash/invoices" className="text-[#6b7280] hover:text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center" aria-label="Back to invoices">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div className="flex-1">

@@ -139,7 +139,7 @@ export default function NewQuotePage() {
   return (
     <div className="max-w-2xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
-        <Link href="/dash/quotes" className="text-[#6b7280] hover:text-white transition-colors">
+        <Link href="/dash/quotes" aria-label="Back to quotes" className="text-[#6b7280] hover:text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div>

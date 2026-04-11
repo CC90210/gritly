@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useOrgStore } from "@/lib/store/org";
 import { UserCog, Plus, X, Loader2, AlertCircle } from "lucide-react";
+import { useToast } from "@/lib/hooks/useToast";
+import { ToastContainer } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 
 interface TeamMember {
@@ -34,6 +36,7 @@ export default function TeamPage() {
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { toasts, dismiss, success: toastSuccess } = useToast();
 
   const [form, setForm] = useState({
     firstName: "",
@@ -97,6 +100,7 @@ export default function TeamPage() {
       setMembers((prev) => [created, ...prev]);
       setShowModal(false);
       setForm({ firstName: "", lastName: "", email: "", phone: "", role: "technician", hourlyRate: "", color: TEAM_COLORS[0] });
+      toastSuccess(`${workerSingular} added`);
     } catch {
       setError("Network error.");
     } finally {
@@ -106,14 +110,15 @@ export default function TeamPage() {
 
   return (
     <div>
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
       {/* Add member modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4">
           <div className="absolute inset-0 bg-black/60" onClick={() => setShowModal(false)} />
-          <div className="relative bg-[#111111] border border-[#1f1f1f] rounded-2xl p-6 w-full max-w-md shadow-2xl">
+          <div className="relative bg-[#111111] border border-[#1f1f1f] rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-white font-semibold">Add {workerSingular}</h3>
-              <button onClick={() => setShowModal(false)} className="text-[#6b7280] hover:text-white">
+              <button onClick={() => setShowModal(false)} className="text-[#6b7280] hover:text-white" aria-label="Close">
                 <X className="w-5 h-5" />
               </button>
             </div>

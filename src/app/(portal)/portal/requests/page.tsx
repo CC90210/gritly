@@ -152,7 +152,8 @@ export default function PortalRequestsPage() {
             <h2 className="text-white font-semibold">New Service Request</h2>
             <button
               onClick={() => { setShowForm(false); setError(null); }}
-              className="text-[#6b7280] hover:text-white transition-colors"
+              aria-label="Close form"
+              className="text-[#6b7280] hover:text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
             >
               <X className="w-5 h-5" />
             </button>

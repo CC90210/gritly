@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { Inbox, Loader2, UserPlus, ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { useToast } from "@/lib/hooks/useToast";
+import { ToastContainer } from "@/components/ui/Toast";
 
 interface ServiceRequest {
   id: string;
@@ -40,6 +42,7 @@ export default function RequestsPage() {
   const [error, setError] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [converting, setConverting] = useState<string | null>(null);
+  const { toasts, dismiss, success, error: toastError } = useToast();
 
   useEffect(() => {
     loadRequests();
@@ -72,9 +75,12 @@ export default function RequestsPage() {
         setRequests((prev) =>
           prev.map((r) => r.id === requestId ? { ...r, ...updated.request } : r)
         );
+        success("Request converted to client");
+      } else {
+        toastError("Failed to convert. Please try again.");
       }
     } catch {
-      // silently fail — convert button re-enables
+      toastError("Network error. Please try again.");
     } finally {
       setConverting(null);
     }
@@ -84,6 +90,8 @@ export default function RequestsPage() {
 
   return (
     <div>
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
+
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold text-white">Service Requests</h1>
@@ -147,9 +155,10 @@ export default function RequestsPage() {
 
                 {!req.convertedToClientId && req.status !== "declined" && (
                   <button
-                    onClick={(e) => { e.stopPropagation(); convertToClient(req.id); }}
+                    onClick={(e) => { e.stopPropagation(); void convertToClient(req.id); }}
                     disabled={converting === req.id}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 text-xs font-medium transition-colors shrink-0"
+                    aria-label={`Convert ${req.name} to client`}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 text-xs font-medium transition-colors shrink-0 min-h-[44px]"
                   >
                     {converting === req.id
                       ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -175,7 +184,7 @@ export default function RequestsPage() {
                     {req.email && (
                       <div>
                         <p className="text-xs font-medium text-[#6b7280] mb-1">Email</p>
-                        <a href={`mailto:${req.email}`} className="text-sm text-orange-400 hover:underline">
+                        <a href={`mailto:${req.email}`} className="text-sm text-orange-400 hover:underline break-all">
                           {req.email}
                         </a>
                       </div>
