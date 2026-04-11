@@ -1,21 +1,63 @@
+import { NextResponse } from "next/server";
+
+type Bucket = {
+  count: number;
+  resetAt: number;
+};
+
+const buckets = new Map<string, Bucket>();
+
+function pruneExpiredBuckets(now: number): void {
+  for (const [key, bucket] of buckets.entries()) {
+    if (bucket.resetAt <= now) {
+      buckets.delete(key);
+    }
+  }
+}
+
 /**
- * Rate limiting is intentionally removed from application code.
- *
- * In-memory rate limiters are non-functional in serverless environments
- * (Vercel) because each invocation gets a fresh process with no shared state.
- *
- * Production rate limiting should be handled at the infrastructure layer:
- *   - Vercel Edge / Vercel Firewall: real edge-enforced rate limiting
- *   - Cloudflare: Rate limiting rules on the edge
- *   - Upstash Redis: If a per-route limit is ever needed at the app layer
- *
- * This stub is intentionally a no-op so existing imports do not break while the
- * app is waiting for a real implementation. All current call sites are allowed.
+ * Best-effort in-process rate limiting.
+ * This protects single-node and warm-runtime traffic bursts, but it should still
+ * be paired with edge rate limiting in production.
  */
 export function rateLimit(
-  _key: string,
-  _maxRequests: number,
-  _windowMs: number
-): null {
+  key: string,
+  maxRequests: number,
+  windowMs: number,
+): NextResponse | null {
+  const now = Date.now();
+
+  if (buckets.size > 10_000) {
+    pruneExpiredBuckets(now);
+  }
+
+  const existing = buckets.get(key);
+  if (!existing || existing.resetAt <= now) {
+    buckets.set(key, {
+      count: 1,
+      resetAt: now + windowMs,
+    });
+
+    return null;
+  }
+
+  if (existing.count >= maxRequests) {
+    const retryAfterSeconds = Math.max(1, Math.ceil((existing.resetAt - now) / 1000));
+    return NextResponse.json(
+      { error: "Too many requests. Please try again shortly." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(retryAfterSeconds),
+          "X-RateLimit-Limit": String(maxRequests),
+          "X-RateLimit-Remaining": "0",
+          "X-RateLimit-Reset": String(existing.resetAt),
+        },
+      },
+    );
+  }
+
+  existing.count += 1;
+  buckets.set(key, existing);
   return null;
 }

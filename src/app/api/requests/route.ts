@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { serviceRequests, organizations } from "@/lib/db/schema";
+import { organizations, serviceRequests } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
 import { rateLimit } from "@/lib/middleware/rate-limit";
@@ -8,11 +8,12 @@ import { logAudit } from "@/lib/audit";
 import { parseBody } from "@/lib/utils/parse-body";
 import { sendEmail } from "@/lib/email";
 import { bookingConfirmationTemplate } from "@/lib/email/templates";
+import { isValidUuid, normalizeEmail, sanitizeText } from "@/lib/api/validation";
+import { parsePagination } from "@/lib/api/pagination";
 
-const sanitize = (s: string, max = 500) => s.trim().slice(0, max);
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// GET: requires auth (staff listing requests)
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   const authResult = await requireRole("technician");
   if (!isAuthorized(authResult)) return authResult;
   const { orgId, userId } = authResult;
@@ -20,18 +21,21 @@ export async function GET(_req: NextRequest) {
   const limited = rateLimit(`session:${userId}`, 60, 60_000);
   if (limited) return limited;
 
-  const rows = await db
+  const pagination = parsePagination(req.nextUrl.searchParams);
+  if (pagination instanceof NextResponse) return pagination;
+
+  const baseQuery = db
     .select()
     .from(serviceRequests)
     .where(eq(serviceRequests.orgId, orgId))
     .orderBy(desc(serviceRequests.createdAt));
-
+  const rows = pagination
+    ? await baseQuery.limit(pagination.limit).offset(pagination.offset)
+    : await baseQuery;
   return NextResponse.json(rows);
 }
 
-// POST: public -- no auth (website booking widget)
 export async function POST(req: NextRequest) {
-  // Rate limit by IP for public endpoint
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   const limited = rateLimit(`ip:requests:${ip}`, 5, 60_000);
   if (limited) return limited;
@@ -52,15 +56,25 @@ export async function POST(req: NextRequest) {
   }>(req);
   if (body instanceof NextResponse) return body;
 
-  if (!body.orgId) {
-    return NextResponse.json({ error: "orgId is required" }, { status: 422 });
+  if (!isValidUuid(body.orgId)) {
+    return NextResponse.json({ error: "A valid orgId is required" }, { status: 422 });
   }
 
-  if (!body.firstName || !body.lastName || !body.email || !body.serviceType || !body.description) {
+  const firstName = typeof body.firstName === "string" ? sanitizeText(body.firstName, 100) : "";
+  const lastName = typeof body.lastName === "string" ? sanitizeText(body.lastName, 100) : "";
+  const email = typeof body.email === "string" ? normalizeEmail(body.email).slice(0, 254) : "";
+  const serviceType = typeof body.serviceType === "string" ? sanitizeText(body.serviceType, 100) : "";
+  const description = typeof body.description === "string" ? sanitizeText(body.description, 2000) : "";
+
+  if (!firstName || !lastName || !email || !serviceType || !description) {
     return NextResponse.json(
       { error: "firstName, lastName, email, serviceType, and description are required" },
-      { status: 422 }
+      { status: 422 },
     );
+  }
+
+  if (!EMAIL_RE.test(email)) {
+    return NextResponse.json({ error: "A valid email address is required" }, { status: 422 });
   }
 
   const [org] = await db
@@ -77,20 +91,28 @@ export async function POST(req: NextRequest) {
     .insert(serviceRequests)
     .values({
       orgId: body.orgId,
-      firstName: sanitize(body.firstName, 100),
-      lastName: sanitize(body.lastName, 100),
-      email: sanitize(body.email, 254),
-      phone: body.phone ? sanitize(body.phone, 30) : null,
-      serviceType: sanitize(body.serviceType, 100),
-      description: sanitize(body.description, 2000),
-      address: body.address ? sanitize(body.address, 500) : null,
-      preferredDate: body.preferredDate ?? null,
-      preferredTime: body.preferredTime ?? null,
-      source: body.source ? sanitize(body.source, 50) : "website",
-      notes: body.notes ? sanitize(body.notes, 1000) : null,
+      firstName,
+      lastName,
+      email,
+      phone: typeof body.phone === "string" ? sanitizeText(body.phone, 30) : null,
+      serviceType,
+      description,
+      address: typeof body.address === "string" ? sanitizeText(body.address, 500) : null,
+      preferredDate: typeof body.preferredDate === "string" ? body.preferredDate : null,
+      preferredTime: typeof body.preferredTime === "string" ? body.preferredTime : null,
+      source: typeof body.source === "string" ? sanitizeText(body.source, 50) : "website",
+      notes: typeof body.notes === "string" ? sanitizeText(body.notes, 1000) : null,
       status: "new",
     })
     .returning();
+
+  await logAudit({
+    orgId: body.orgId,
+    action: "create",
+    entityType: "service_request",
+    entityId: row.id,
+    metadata: { source: row.source, publicRequest: true },
+  });
 
   let confirmationEmailSent = false;
   try {
@@ -114,3 +136,4 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ...row, confirmationEmailSent }, { status: 201 });
 }
+

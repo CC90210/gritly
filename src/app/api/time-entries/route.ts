@@ -3,27 +3,57 @@ import { db } from "@/lib/db";
 import { timeEntries, teamMembers, jobs } from "@/lib/db/schema";
 import { eq, and, gte, lte, desc, isNull } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
+import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { parseBody } from "@/lib/utils/parse-body";
+import { parsePagination } from "@/lib/api/pagination";
+import { jobExists, teamMemberExists, visitExists } from "@/lib/api/tenant";
+import { isValidUuid, parseIsoDate, sanitizeText } from "@/lib/api/validation";
 
 export async function GET(req: NextRequest) {
   const authResult = await requireRole("technician");
   if (!isAuthorized(authResult)) return authResult;
-  const { orgId } = authResult;
+  const { orgId, userId } = authResult;
 
-  const { searchParams } = new URL(req.url);
-  const jobId = searchParams.get("jobId");
-  const teamMemberId = searchParams.get("teamMemberId");
-  const startDate = searchParams.get("startDate");
-  const endDate = searchParams.get("endDate");
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
-  const conditions: ReturnType<typeof eq>[] = [eq(timeEntries.orgId, orgId)];
+  const jobId = req.nextUrl.searchParams.get("jobId");
+  const teamMemberId = req.nextUrl.searchParams.get("teamMemberId");
+  const startDate = req.nextUrl.searchParams.get("startDate");
+  const endDate = req.nextUrl.searchParams.get("endDate");
+
+  if (jobId && (!isValidUuid(jobId) || !(await jobExists(orgId, jobId)))) {
+    return NextResponse.json({ error: "jobId must belong to the same organization" }, { status: 422 });
+  }
+
+  if (teamMemberId && (!isValidUuid(teamMemberId) || !(await teamMemberExists(orgId, teamMemberId)))) {
+    return NextResponse.json(
+      { error: "teamMemberId must belong to the same organization" },
+      { status: 422 },
+    );
+  }
+
+  const parsedStart = startDate ? parseIsoDate(startDate) : null;
+  if (startDate && !parsedStart) {
+    return NextResponse.json({ error: "startDate must be a valid date" }, { status: 422 });
+  }
+
+  const parsedEnd = endDate ? parseIsoDate(endDate) : null;
+  if (endDate && !parsedEnd) {
+    return NextResponse.json({ error: "endDate must be a valid date" }, { status: 422 });
+  }
+
+  const pagination = parsePagination(req.nextUrl.searchParams);
+  if (pagination instanceof NextResponse) return pagination;
+
+  const conditions = [eq(timeEntries.orgId, orgId)];
   if (jobId) conditions.push(eq(timeEntries.jobId, jobId));
   if (teamMemberId) conditions.push(eq(timeEntries.teamMemberId, teamMemberId));
-  if (startDate) conditions.push(gte(timeEntries.clockIn, new Date(startDate)));
-  if (endDate) conditions.push(lte(timeEntries.clockIn, new Date(endDate)));
+  if (parsedStart) conditions.push(gte(timeEntries.clockIn, parsedStart));
+  if (parsedEnd) conditions.push(lte(timeEntries.clockIn, parsedEnd));
 
-  const rows = await db
+  const baseQuery = db
     .select({
       id: timeEntries.id,
       teamMemberId: timeEntries.teamMemberId,
@@ -43,54 +73,69 @@ export async function GET(req: NextRequest) {
     .where(and(...conditions))
     .orderBy(desc(timeEntries.clockIn));
 
+  const rows = pagination
+    ? await baseQuery.limit(pagination.limit).offset(pagination.offset)
+    : await baseQuery;
+
   return NextResponse.json(rows);
 }
 
 export async function POST(req: NextRequest) {
-  const authResult = await requireRole("technician");
+  const authResult = await requireRole("manager");
   if (!isAuthorized(authResult)) return authResult;
   const { orgId, userId } = authResult;
 
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
+
   const body = await parseBody<{
     teamMemberId?: string;
-    jobId?: string;
-    visitId?: string;
+    jobId?: string | null;
+    visitId?: string | null;
     clockIn?: string;
-    clockOut?: string;
-    notes?: string;
+    clockOut?: string | null;
+    notes?: string | null;
   }>(req);
   if (body instanceof NextResponse) return body;
 
-  if (!body.teamMemberId || !body.clockIn) {
+  if (!isValidUuid(body.teamMemberId) || !(await teamMemberExists(orgId, body.teamMemberId))) {
     return NextResponse.json(
-      { error: "teamMemberId and clockIn are required" },
-      { status: 422 }
+      { error: "teamMemberId must belong to the same organization" },
+      { status: 422 },
     );
   }
 
-  if (isNaN(Date.parse(body.clockIn))) {
+  if (body.jobId !== undefined && body.jobId !== null) {
+    if (!isValidUuid(body.jobId) || !(await jobExists(orgId, body.jobId))) {
+      return NextResponse.json({ error: "jobId must belong to the same organization" }, { status: 422 });
+    }
+  }
+
+  if (body.visitId !== undefined && body.visitId !== null) {
+    if (!isValidUuid(body.visitId) || !(await visitExists(orgId, body.visitId))) {
+      return NextResponse.json({ error: "visitId must belong to the same organization" }, { status: 422 });
+    }
+  }
+
+  const clockIn = body.clockIn ? parseIsoDate(body.clockIn) : null;
+  if (!clockIn) {
     return NextResponse.json({ error: "clockIn must be a valid ISO date string" }, { status: 422 });
   }
 
-  // Verify team member belongs to org
-  const [member] = await db
-    .select({ id: teamMembers.id })
-    .from(teamMembers)
-    .where(and(eq(teamMembers.id, body.teamMemberId), eq(teamMembers.orgId, orgId)))
-    .limit(1);
-  if (!member) {
-    return NextResponse.json({ error: "Invalid teamMemberId" }, { status: 422 });
+  const clockOut = body.clockOut ? parseIsoDate(body.clockOut) : null;
+  if (body.clockOut && !clockOut) {
+    return NextResponse.json({ error: "clockOut must be a valid ISO date string" }, { status: 422 });
   }
 
   const [existingOpenEntry] = await db
-    .select({ id: timeEntries.id, clockIn: timeEntries.clockIn })
+    .select({ id: timeEntries.id })
     .from(timeEntries)
     .where(
       and(
         eq(timeEntries.orgId, orgId),
         eq(timeEntries.teamMemberId, body.teamMemberId),
-        isNull(timeEntries.clockOut)
-      )
+        isNull(timeEntries.clockOut),
+      ),
     )
     .limit(1);
 
@@ -100,14 +145,10 @@ export async function POST(req: NextRequest) {
         error: "This team member already has an open time entry. Close it before starting a new one.",
         existingEntryId: existingOpenEntry.id,
       },
-      { status: 409 }
+      { status: 409 },
     );
   }
 
-  const clockIn = new Date(body.clockIn);
-  const clockOut = body.clockOut ? new Date(body.clockOut) : null;
-
-  // Auto-calculate duration
   let durationMinutes: number | null = null;
   if (clockOut) {
     durationMinutes = Math.round((clockOut.getTime() - clockIn.getTime()) / 60_000);
@@ -126,7 +167,7 @@ export async function POST(req: NextRequest) {
       clockIn,
       clockOut,
       durationMinutes,
-      notes: body.notes ?? null,
+      notes: typeof body.notes === "string" ? sanitizeText(body.notes, 4000) : null,
     })
     .returning();
 
@@ -134,6 +175,3 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json(row, { status: 201 });
 }
-
-// PATCH removed from collection route — use /api/time-entries/[id] instead.
-// The collection-level PATCH was redundant and lacked proper org-scoping on the update.

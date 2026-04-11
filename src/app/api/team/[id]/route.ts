@@ -67,12 +67,12 @@ export async function DELETE(
   const [timeRef] = await db
     .select({ id: timeEntries.id })
     .from(timeEntries)
-    .where(eq(timeEntries.teamMemberId, id))
+    .where(and(eq(timeEntries.teamMemberId, id), eq(timeEntries.orgId, orgId)))
     .limit(1);
   const [expRef] = await db
     .select({ id: expenses.id })
     .from(expenses)
-    .where(eq(expenses.teamMemberId, id))
+    .where(and(eq(expenses.teamMemberId, id), eq(expenses.orgId, orgId)))
     .limit(1);
 
   if (timeRef || expRef) {
@@ -93,3 +93,5 @@ export async function DELETE(
 
   return NextResponse.json({ success: true });
 }
+
+

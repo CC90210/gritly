@@ -12,7 +12,7 @@ interface MonthBucket {
 
 export async function GET() {
   try {
-    const authResult = await requireRole("manager");
+    const authResult = await requireRole("technician");
     if (!isAuthorized(authResult)) return authResult;
     const { orgId } = authResult;
 
@@ -172,3 +172,4 @@ export async function GET() {
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
+

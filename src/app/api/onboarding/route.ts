@@ -1,33 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
 import { db } from "@/lib/db";
-import { users, organizations, onboardingResponses } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { requireRole, isAuthorized } from "@/lib/auth/require-role";
+import { onboardingResponses, organizations } from "@/lib/db/schema";
+import { and, eq } from "drizzle-orm";
 import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
+import { parseBody } from "@/lib/utils/parse-body";
+import { isPlainObject, sanitizeText } from "@/lib/api/validation";
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authResult = await requireRole("manager");
+    if (!isAuthorized(authResult)) return authResult;
+    const { orgId, userId } = authResult;
 
-    const limited = rateLimit(`session:${session.user.id}`, 60, 60_000);
+    const limited = rateLimit(`session:${userId}`, 60, 60_000);
     if (limited) return limited;
 
-    const body = await request.json();
-    const { step, data } = body;
+    const body = await parseBody<{ step?: number; data?: Record<string, unknown> }>(request);
+    if (body instanceof NextResponse) return body;
 
-    if (!Number.isInteger(step) || step < 1 || step > 5) {
+    const step = body.step;
+    if (typeof step !== "number" || !Number.isInteger(step) || step < 1 || step > 5) {
       return NextResponse.json({ error: "step must be an integer between 1 and 5" }, { status: 422 });
     }
 
-    const userRows = await db.select({ orgId: users.orgId }).from(users).where(eq(users.id, session.user.id)).limit(1);
-    const orgId = userRows[0]?.orgId;
-    if (!orgId) {
-      return NextResponse.json({ error: "No org" }, { status: 400 });
+    if (body.data !== undefined && !isPlainObject(body.data)) {
+      return NextResponse.json({ error: "data must be a JSON object" }, { status: 422 });
     }
 
     const existing = await db
@@ -39,55 +38,65 @@ export async function POST(request: NextRequest) {
     if (existing.length > 0) {
       await db
         .update(onboardingResponses)
-        .set({ data, updatedAt: new Date() })
+        .set({ data: body.data ?? {}, updatedAt: new Date() })
         .where(eq(onboardingResponses.id, existing[0].id));
     } else {
       await db.insert(onboardingResponses).values({
         orgId,
         step,
-        data,
+        data: body.data ?? {},
       });
     }
 
-    await logAudit({ orgId, userId: session.user.id, action: "update", entityType: "onboarding", entityId: orgId, metadata: { step } });
+    await logAudit({
+      orgId,
+      userId,
+      action: "update",
+      entityType: "onboarding",
+      entityId: orgId,
+      metadata: { step },
+    });
 
     return NextResponse.json({ success: true });
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
 
 export async function PUT(request: NextRequest) {
   try {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authResult = await requireRole("manager");
+    if (!isAuthorized(authResult)) return authResult;
+    const { orgId, userId } = authResult;
 
-    const limited = rateLimit(`session:${session.user.id}`, 60, 60_000);
+    const limited = rateLimit(`session:${userId}`, 60, 60_000);
     if (limited) return limited;
 
-    const body = await request.json();
-    const { industry } = body;
+    const body = await parseBody<{ industry?: string }>(request);
+    if (body instanceof NextResponse) return body;
 
-    const userRows = await db.select({ orgId: users.orgId }).from(users).where(eq(users.id, session.user.id)).limit(1);
-    const orgId = userRows[0]?.orgId;
-    if (!orgId) {
-      return NextResponse.json({ error: "No org" }, { status: 400 });
-    }
+    const industry = typeof body.industry === "string" ? sanitizeText(body.industry, 50) : "hvac";
 
     await db
       .update(organizations)
       .set({
-        industry: industry || "hvac",
+        industry,
         onboardingCompleted: true,
       })
       .where(eq(organizations.id, orgId));
 
-    await logAudit({ orgId, userId: session.user.id, action: "update", entityType: "organization", entityId: orgId, metadata: { onboardingCompleted: true, industry } });
+    await logAudit({
+      orgId,
+      userId,
+      action: "update",
+      entityType: "organization",
+      entityId: orgId,
+      metadata: { onboardingCompleted: true, industry },
+    });
 
     return NextResponse.json({ success: true });
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
+

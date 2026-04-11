@@ -88,12 +88,12 @@ export async function DELETE(
   const [quotesRef] = await db
     .select({ id: quotes.id })
     .from(quotes)
-    .where(eq(quotes.propertyId, id))
+    .where(and(eq(quotes.propertyId, id), eq(quotes.orgId, orgId)))
     .limit(1);
   const [jobsRef] = await db
     .select({ id: jobs.id })
     .from(jobs)
-    .where(eq(jobs.propertyId, id))
+    .where(and(eq(jobs.propertyId, id), eq(jobs.orgId, orgId)))
     .limit(1);
 
   if (quotesRef || jobsRef) {
@@ -114,3 +114,5 @@ export async function DELETE(
 
   return NextResponse.json({ success: true });
 }
+
+

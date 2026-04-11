@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
+import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { users, organizations } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -41,7 +41,14 @@ export async function GET() {
 
     if (user.orgId) {
       const orgRows = await db
-        .select()
+        .select({
+          id: organizations.id,
+          name: organizations.name,
+          slug: organizations.slug,
+          industry: organizations.industry,
+          plan: organizations.plan,
+          onboardingCompleted: organizations.onboardingCompleted,
+        })
         .from(organizations)
         .where(eq(organizations.id, user.orgId))
         .limit(1);

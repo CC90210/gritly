@@ -22,13 +22,15 @@ export type AuditEntityType =
   | "onboarding"
   | "inventory_item";
 
+const SYSTEM_AUDIT_USER_ID = "system";
+
 /**
- * Log an audit event. Awaitable — callers should await this so the insert
+ * Log an audit event. Awaitable - callers should await this so the insert
  * completes before the serverless function tears down.
  */
 export async function logAudit(params: {
   orgId: string;
-  userId: string;
+  userId?: string;
   action: AuditAction;
   entityType: AuditEntityType;
   entityId: string;
@@ -37,7 +39,7 @@ export async function logAudit(params: {
   await db.insert(auditLogs)
     .values({
       orgId: params.orgId,
-      userId: params.userId,
+      userId: params.userId ?? SYSTEM_AUDIT_USER_ID,
       action: params.action,
       entityType: params.entityType,
       entityId: params.entityId,

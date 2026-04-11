@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { communications, clients } from "@/lib/db/schema";
+import { communications } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
+import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { parseBody } from "@/lib/utils/parse-body";
+import { parsePagination } from "@/lib/api/pagination";
+import { clientExists } from "@/lib/api/tenant";
+import { isValidUuid, sanitizeText } from "@/lib/api/validation";
 
 const ALLOWED_TYPES = new Set(["email", "sms", "phone", "note"]);
 const ALLOWED_DIRECTIONS = new Set(["inbound", "outbound"]);
@@ -12,76 +16,72 @@ const ALLOWED_DIRECTIONS = new Set(["inbound", "outbound"]);
 export async function GET(req: NextRequest) {
   const authResult = await requireRole("technician");
   if (!isAuthorized(authResult)) return authResult;
-  const { orgId } = authResult;
+  const { orgId, userId } = authResult;
 
-  const { searchParams } = new URL(req.url);
-  const clientId = searchParams.get("clientId");
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
-  if (!clientId) {
-    return NextResponse.json({ error: "clientId query param is required" }, { status: 422 });
+  const clientId = req.nextUrl.searchParams.get("clientId");
+  if (!clientId || !isValidUuid(clientId) || !(await clientExists(orgId, clientId))) {
+    return NextResponse.json({ error: "clientId must belong to the same organization" }, { status: 422 });
   }
 
-  // Verify the client belongs to this org
-  const [client] = await db
-    .select({ id: clients.id })
-    .from(clients)
-    .where(and(eq(clients.id, clientId), eq(clients.orgId, orgId)))
-    .limit(1);
+  const pagination = parsePagination(req.nextUrl.searchParams);
+  if (pagination instanceof NextResponse) return pagination;
 
-  if (!client) {
-    return NextResponse.json({ error: "Client not found" }, { status: 404 });
-  }
-
-  const rows = await db
+  const baseQuery = db
     .select()
     .from(communications)
     .where(and(eq(communications.clientId, clientId), eq(communications.orgId, orgId)))
     .orderBy(desc(communications.createdAt));
 
+  const rows = pagination
+    ? await baseQuery.limit(pagination.limit).offset(pagination.offset)
+    : await baseQuery;
+
   return NextResponse.json(rows);
 }
 
 export async function POST(req: NextRequest) {
-  const authResult = await requireRole("technician");
+  const authResult = await requireRole("manager");
   if (!isAuthorized(authResult)) return authResult;
   const { orgId, userId } = authResult;
 
+  const limited = rateLimit(`session:${userId}`, 60, 60_000);
+  if (limited) return limited;
+
   const body = await parseBody<{
-    clientId: string;
+    clientId?: string;
     type?: string;
     direction?: string;
     subject?: string;
-    body: string;
+    body?: string;
   }>(req);
   if (body instanceof NextResponse) return body;
 
-  if (!body.clientId || !body.body) {
-    return NextResponse.json({ error: "clientId and body are required" }, { status: 422 });
+  if (!isValidUuid(body.clientId) || !(await clientExists(orgId, body.clientId))) {
+    return NextResponse.json({ error: "clientId must belong to the same organization" }, { status: 422 });
   }
 
-  if (body.type && !ALLOWED_TYPES.has(body.type)) {
+  const type = typeof body.type === "string" ? body.type : "note";
+  if (!ALLOWED_TYPES.has(type)) {
     return NextResponse.json(
       { error: `Invalid type. Allowed: ${[...ALLOWED_TYPES].join(", ")}` },
-      { status: 422 }
+      { status: 422 },
     );
   }
 
-  if (body.direction && !ALLOWED_DIRECTIONS.has(body.direction)) {
+  const direction = typeof body.direction === "string" ? body.direction : "outbound";
+  if (!ALLOWED_DIRECTIONS.has(direction)) {
     return NextResponse.json(
       { error: `Invalid direction. Allowed: ${[...ALLOWED_DIRECTIONS].join(", ")}` },
-      { status: 422 }
+      { status: 422 },
     );
   }
 
-  // Verify client belongs to org
-  const [client] = await db
-    .select({ id: clients.id })
-    .from(clients)
-    .where(and(eq(clients.id, body.clientId), eq(clients.orgId, orgId)))
-    .limit(1);
-
-  if (!client) {
-    return NextResponse.json({ error: "Client not found" }, { status: 404 });
+  const messageBody = typeof body.body === "string" ? sanitizeText(body.body, 10000) : "";
+  if (!messageBody) {
+    return NextResponse.json({ error: "body is required" }, { status: 422 });
   }
 
   const [row] = await db
@@ -89,10 +89,10 @@ export async function POST(req: NextRequest) {
     .values({
       orgId,
       clientId: body.clientId,
-      type: body.type ?? "note",
-      direction: body.direction ?? "outbound",
-      subject: body.subject ?? null,
-      body: body.body,
+      type,
+      direction,
+      subject: typeof body.subject === "string" ? sanitizeText(body.subject, 200) : null,
+      body: messageBody,
     })
     .returning();
 
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
     action: "create",
     entityType: "communication",
     entityId: row.id,
-    metadata: { clientId: body.clientId, type: body.type ?? "note" },
+    metadata: { clientId: body.clientId, type },
   });
 
   return NextResponse.json(row, { status: 201 });

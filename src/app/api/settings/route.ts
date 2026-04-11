@@ -27,7 +27,7 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
-  const authResult = await requireRole("admin");
+  const authResult = await requireRole("manager");
   if (!isAuthorized(authResult)) return authResult;
   const { orgId, userId } = authResult;
 
@@ -78,3 +78,4 @@ export async function PATCH(req: NextRequest) {
 
   return NextResponse.json({ name: updated.name, settings: updated.settings ?? {} });
 }
+

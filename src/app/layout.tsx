@@ -1,20 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: {
-    default: "Gritly — Built for grit.",
+    default: "Gritly - Built for grit.",
     template: "%s | Gritly",
   },
   description:
-    "The field service platform that replaces Jobber, CompanyCam, and 4 other tools — with unlimited users on every plan.",
+    "The field service platform that replaces Jobber, CompanyCam, and 4 other tools - with unlimited users on every plan.",
   keywords: [
     "field service management",
     "Jobber alternative",
@@ -34,15 +27,15 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: "https://grit.ly",
     siteName: "Gritly",
-    title: "Gritly — Built for grit.",
+    title: "Gritly - Built for grit.",
     description:
-      "The field service platform that replaces Jobber, CompanyCam, and 4 other tools — with unlimited users on every plan.",
+      "The field service platform that replaces Jobber, CompanyCam, and 4 other tools - with unlimited users on every plan.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Gritly — Built for grit.",
+    title: "Gritly - Built for grit.",
     description:
-      "The field service platform that replaces Jobber, CompanyCam, and 4 other tools — with unlimited users on every plan.",
+      "The field service platform that replaces Jobber, CompanyCam, and 4 other tools - with unlimited users on every plan.",
   },
   robots: {
     index: true,
@@ -66,7 +59,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} h-full`}>
+    <html lang="en" className="h-full">
       <body className="min-h-full flex flex-col bg-[#0a0a0a] text-white antialiased">
         {children}
       </body>

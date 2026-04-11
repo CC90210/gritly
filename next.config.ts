@@ -28,6 +28,9 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  experimental: {
+    workerThreads: true,
+  },
   async headers() {
     return [
       {

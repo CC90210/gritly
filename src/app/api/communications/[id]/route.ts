@@ -9,7 +9,7 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const authResult = await requireRole("manager");
+  const authResult = await requireRole("admin");
   if (!isAuthorized(authResult)) return authResult;
   const { orgId, userId } = authResult;
 
@@ -40,3 +40,4 @@ export async function DELETE(
 
   return new NextResponse(null, { status: 204 });
 }
+

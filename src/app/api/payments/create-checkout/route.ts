@@ -6,21 +6,32 @@ import { requireRole, isAuthorized } from "@/lib/auth/require-role";
 import { logAudit } from "@/lib/audit";
 import { parseBody } from "@/lib/utils/parse-body";
 import { getStripe } from "@/lib/stripe";
+import { rateLimit } from "@/lib/middleware/rate-limit";
+import { isValidUuid } from "@/lib/api/validation";
 
 export async function POST(req: NextRequest) {
-  const authResult = await requireRole("technician");
+  const authResult = await requireRole("manager");
   if (!isAuthorized(authResult)) return authResult;
   const { orgId, userId } = authResult;
 
-  const body = await parseBody<{ invoiceId: string }>(req);
+  const limited = rateLimit(`session:${userId}`, 30, 60_000);
+  if (limited) return limited;
+
+  const body = await parseBody<{ invoiceId?: string }>(req);
   if (body instanceof NextResponse) return body;
 
-  if (!body.invoiceId) {
-    return NextResponse.json({ error: "invoiceId is required" }, { status: 422 });
+  if (!isValidUuid(body.invoiceId)) {
+    return NextResponse.json({ error: "A valid invoiceId is required" }, { status: 422 });
   }
 
   const [invoice] = await db
-    .select()
+    .select({
+      id: invoices.id,
+      invoiceNumber: invoices.invoiceNumber,
+      total: invoices.total,
+      amountPaid: invoices.amountPaid,
+      status: invoices.status,
+    })
     .from(invoices)
     .where(and(eq(invoices.id, body.invoiceId), eq(invoices.orgId, orgId)))
     .limit(1);
@@ -32,33 +43,32 @@ export async function POST(req: NextRequest) {
   if (invoice.status === "paid" || invoice.status === "void") {
     return NextResponse.json(
       { error: `Cannot create a payment link for a ${invoice.status} invoice` },
-      { status: 422 }
+      { status: 422 },
     );
   }
 
   const balanceDue = (invoice.total ?? 0) - (invoice.amountPaid ?? 0);
-
   if (balanceDue <= 0) {
     return NextResponse.json({ error: "No balance due on this invoice" }, { status: 422 });
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `https://${req.headers.get("host")}`;
 
-  const lineItems = [{
-    price_data: {
-      currency: "cad",
-      product_data: {
-        name: `Invoice ${invoice.invoiceNumber}`,
-        description: `Payment for invoice ${invoice.invoiceNumber}`,
-      },
-      unit_amount: Math.round(balanceDue * 100),
-    },
-    quantity: 1,
-  }];
-
   const session = await getStripe().checkout.sessions.create({
     mode: "payment",
-    line_items: lineItems,
+    line_items: [
+      {
+        price_data: {
+          currency: "cad",
+          product_data: {
+            name: `Invoice ${invoice.invoiceNumber}`,
+            description: `Payment for invoice ${invoice.invoiceNumber}`,
+          },
+          unit_amount: Math.round(balanceDue * 100),
+        },
+        quantity: 1,
+      },
+    ],
     success_url: `${baseUrl}/dash/invoices/${invoice.id}?payment=success`,
     cancel_url: `${baseUrl}/dash/invoices/${invoice.id}?payment=cancelled`,
     metadata: {

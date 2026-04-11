@@ -1,45 +1,23 @@
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { users, clients, invoices } from "@/lib/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { invoices } from "@/lib/db/schema";
+import { and, desc, eq } from "drizzle-orm";
+import { requirePortalClient } from "@/lib/api/portal-context";
+import { rateLimit } from "@/lib/middleware/rate-limit";
+import { parsePagination } from "@/lib/api/pagination";
 
-export async function GET() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function GET(req: NextRequest) {
+  const portalContext = await requirePortalClient();
+  if (portalContext instanceof NextResponse) return portalContext;
+  const { orgId, userId, client } = portalContext;
 
-  const userRows = await db
-    .select({ orgId: users.orgId, email: users.email })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
+  const limited = rateLimit(`portal:${userId}`, 60, 60_000);
+  if (limited) return limited;
 
-  const user = userRows[0];
-  if (!user?.orgId) return NextResponse.json({ error: "No org" }, { status: 400 });
+  const pagination = parsePagination(req.nextUrl.searchParams);
+  if (pagination instanceof NextResponse) return pagination;
 
-  const clientRows = await db
-    .select({ id: clients.id })
-    .from(clients)
-    .where(and(eq(clients.userId, session.user.id), eq(clients.orgId, user.orgId)))
-    .limit(1);
-
-  let clientId = clientRows[0]?.id;
-
-  if (!clientId && user.email) {
-    const byEmail = await db
-      .select({ id: clients.id })
-      .from(clients)
-      .where(and(eq(clients.email, user.email), eq(clients.orgId, user.orgId)))
-      .limit(1);
-    clientId = byEmail[0]?.id;
-  }
-
-  if (!clientId) return NextResponse.json({ error: "Client not found" }, { status: 404 });
-
-  const rows = await db
+  const baseQuery = db
     .select({
       id: invoices.id,
       invoiceNumber: invoices.invoiceNumber,
@@ -50,13 +28,16 @@ export async function GET() {
       createdAt: invoices.createdAt,
     })
     .from(invoices)
-    .where(eq(invoices.clientId, clientId))
+    .where(and(eq(invoices.orgId, orgId), eq(invoices.clientId, client.id)))
     .orderBy(desc(invoices.createdAt));
-
+  const rows = pagination
+    ? await baseQuery.limit(pagination.limit).offset(pagination.offset)
+    : await baseQuery;
   return NextResponse.json(
-    rows.map((inv) => ({
-      ...inv,
-      balanceDue: (inv.total ?? 0) - (inv.amountPaid ?? 0),
-    }))
+    rows.map((invoice) => ({
+      ...invoice,
+      balanceDue: (invoice.total ?? 0) - (invoice.amountPaid ?? 0),
+    })),
   );
 }
+

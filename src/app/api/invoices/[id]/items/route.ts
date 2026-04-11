@@ -7,29 +7,32 @@ import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { parseBody } from "@/lib/utils/parse-body";
 
-/** Recalculate invoice totals from items */
+/** Recalculate invoice totals from items inside a transaction to prevent a
+ *  concurrent item edit producing an inconsistent subtotal on the invoice row. */
 async function recalcInvoiceTotals(invoiceId: string) {
-  const items = await db
-    .select()
-    .from(invoiceItems)
-    .where(eq(invoiceItems.invoiceId, invoiceId));
+  await db.transaction(async (tx) => {
+    const items = await tx
+      .select({ total: invoiceItems.total })
+      .from(invoiceItems)
+      .where(eq(invoiceItems.invoiceId, invoiceId));
 
-  const subtotal = items.reduce((sum, item) => sum + (item.total ?? 0), 0);
+    const subtotal = items.reduce((sum, item) => sum + (item.total ?? 0), 0);
 
-  const [inv] = await db
-    .select({ taxRate: invoices.taxRate })
-    .from(invoices)
-    .where(eq(invoices.id, invoiceId))
-    .limit(1);
+    const [inv] = await tx
+      .select({ taxRate: invoices.taxRate })
+      .from(invoices)
+      .where(eq(invoices.id, invoiceId))
+      .limit(1);
 
-  const taxRate = inv?.taxRate ?? 0.13;
-  const taxAmount = subtotal * taxRate;
-  const total = subtotal + taxAmount;
+    const taxRate = inv?.taxRate ?? 0.13;
+    const taxAmount = subtotal * taxRate;
+    const total = subtotal + taxAmount;
 
-  await db
-    .update(invoices)
-    .set({ subtotal, taxAmount, total, updatedAt: new Date() })
-    .where(eq(invoices.id, invoiceId));
+    await tx
+      .update(invoices)
+      .set({ subtotal, taxAmount, total, updatedAt: new Date() })
+      .where(eq(invoices.id, invoiceId));
+  });
 }
 
 export async function GET(
@@ -187,7 +190,7 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const authResult = await requireRole("manager");
+  const authResult = await requireRole("admin");
   if (!isAuthorized(authResult)) return authResult;
   const { orgId, userId } = authResult;
 
@@ -222,3 +225,4 @@ export async function DELETE(
 
   return NextResponse.json({ success: true });
 }
+

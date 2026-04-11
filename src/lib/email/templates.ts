@@ -23,6 +23,21 @@ function esc(value: string | number | null | undefined): string {
   return String(value).replace(/[&<>"']/g, (ch) => HTML_ESCAPE_MAP[ch] ?? ch);
 }
 
+function safeHref(value: string | null | undefined): string {
+  if (!value) return "#";
+
+  try {
+    const normalized = new URL(value, "https://gritly.invalid");
+    if (["http:", "https:", "mailto:"].includes(normalized.protocol)) {
+      return esc(value);
+    }
+  } catch {
+    // Fall through to the inert href below.
+  }
+
+  return "#";
+}
+
 // ─────────────────────────────────────────────────────────────
 // SHARED HELPERS
 // ─────────────────────────────────────────────────────────────
@@ -256,7 +271,7 @@ export function quoteTemplate(p: QuoteTemplateParams): string {
       </tr>
     </table>
     ${validityHtml}
-    <a href="${p.viewUrl}" style="${BTN}">Review &amp; Approve Quote</a>
+    <a href="${safeHref(p.viewUrl)}" style="${BTN}">Review &amp; Approve Quote</a>
     ${divider()}
     <p style="margin:0;font-size:13px;color:#9ca3af;">Questions? Simply reply to this email — we're happy to help.</p>
   `;
@@ -341,7 +356,7 @@ export function invoiceTemplate(p: InvoiceTemplateParams): string {
         </td>
       </tr>
     </table>
-    <a href="${p.payUrl}" style="${BTN}">Pay Invoice Online</a>
+    <a href="${safeHref(p.payUrl)}" style="${BTN}">Pay Invoice Online</a>
     ${divider()}
     <p style="margin:0;font-size:13px;color:#9ca3af;">Questions about your invoice? Reply to this email and we'll sort it out.</p>
   `;
@@ -458,7 +473,7 @@ export function reviewRequestTemplate(p: ReviewRequestTemplateParams): string {
     <div style="text-align:center;margin-bottom:28px;">
       <p style="margin:0 0 8px;font-size:28px;">&#11088;&#11088;&#11088;&#11088;&#11088;</p>
       <p style="margin:0 0 20px;font-size:14px;color:#6b7280;">It only takes 60 seconds.</p>
-      <a href="${p.reviewUrl}" style="${BTN}">Leave a Review</a>
+      <a href="${safeHref(p.reviewUrl)}" style="${BTN}">Leave a Review</a>
     </div>
     ${divider()}
     <p style="margin:0;font-size:13px;color:#9ca3af;text-align:center;">
@@ -528,9 +543,9 @@ export function quoteFollowUpTemplate(p: QuoteFollowUpTemplateParams): string {
         </tr>
       </table>
     </div>
-    <a href="${p.viewUrl}" style="${BTN}">Review Quote</a>
+    <a href="${safeHref(p.viewUrl)}" style="${BTN}">Review Quote</a>
     &nbsp;&nbsp;
-    <a href="mailto:?subject=Question about ${p.quoteNumber}" style="${BTN_SECONDARY}">Ask a Question</a>
+    <a href="${safeHref(`mailto:?subject=${encodeURIComponent(`Question about ${p.quoteNumber}`)}`)}" style="${BTN_SECONDARY}">Ask a Question</a>
     ${divider()}
     <p style="margin:0;font-size:13px;color:#9ca3af;">
       If you've already made other arrangements, no worries — just let us know and we'll close this out.
@@ -571,7 +586,7 @@ export function invoiceOverdueTemplate(p: InvoiceOverdueTemplateParams): string 
         </tr>
       </table>
     </div>
-    <a href="${p.payUrl}" style="${BTN}">Pay Now</a>
+    <a href="${safeHref(p.payUrl)}" style="${BTN}">Pay Now</a>
     ${divider()}
     <p style="margin:0;font-size:13px;color:#9ca3af;">
       If you believe this is an error or need to discuss payment arrangements, reply to this email — we're happy to work with you.
@@ -637,3 +652,4 @@ export function dailyDigestTemplate(p: DailyDigestTemplateParams): string {
     `Daily digest for ${esc(p.businessName)}. Automated by Gritly — sent each morning.`,
   );
 }
+

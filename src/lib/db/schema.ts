@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, index } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 // ============================================================
@@ -40,7 +40,9 @@ export const users = sqliteTable("user", {
   phone: text("phone"),
   firstName: text("first_name"),
   lastName: text("last_name"),
-});
+}, (t) => [
+  index("users_org_id_idx").on(t.orgId),
+]);
 
 export const sessions = sqliteTable("session", {
   id: text("id").primaryKey(),
@@ -51,7 +53,10 @@ export const sessions = sqliteTable("session", {
   ipAddress: text("ipAddress"),
   userAgent: text("userAgent"),
   userId: text("userId").notNull().references(() => users.id),
-});
+}, (t) => [
+  index("sessions_user_id_idx").on(t.userId),
+  index("sessions_expires_at_idx").on(t.expiresAt),
+]);
 
 export const accounts = sqliteTable("account", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -67,7 +72,9 @@ export const accounts = sqliteTable("account", {
   password: text("password"),
   createdAt: integer("createdAt", { mode: "timestamp" }).$defaultFn(() => new Date()),
   updatedAt: integer("updatedAt", { mode: "timestamp" }).$defaultFn(() => new Date()),
-});
+}, (t) => [
+  index("accounts_user_id_idx").on(t.userId),
+]);
 
 export const verifications = sqliteTable("verification", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -113,6 +120,10 @@ export const clients = sqliteTable("clients", {
 }, (t) => [
   index("clients_org_id_idx").on(t.orgId),
   index("clients_email_idx").on(t.email),
+  index("clients_user_id_idx").on(t.userId),
+  // Compound: portal lookups always filter orgId + userId or orgId + email
+  index("clients_org_user_id_idx").on(t.orgId, t.userId),
+  index("clients_org_email_idx").on(t.orgId, t.email),
 ]);
 
 // ============================================================
@@ -182,11 +193,15 @@ export const quotes = sqliteTable("quotes", {
   index("quotes_org_id_idx").on(t.orgId),
   index("quotes_client_id_idx").on(t.clientId),
   index("quotes_status_idx").on(t.status),
+  // Compound: most list queries filter orgId + status together (stats, reports)
+  index("quotes_org_status_idx").on(t.orgId, t.status),
+  // Compound: client detail page queries orgId + clientId together
+  index("quotes_org_client_idx").on(t.orgId, t.clientId),
 ]);
 
 export const quoteItems = sqliteTable("quote_items", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  quoteId: text("quote_id").notNull().references(() => quotes.id),
+  quoteId: text("quote_id").notNull().references(() => quotes.id, { onDelete: "cascade" }),
   serviceId: text("service_id").references(() => serviceItems.id),
   description: text("description").notNull(),
   quantity: real("quantity").default(1),
@@ -194,7 +209,9 @@ export const quoteItems = sqliteTable("quote_items", {
   total: real("total").notNull(),
   isOptional: integer("is_optional", { mode: "boolean" }).default(false),
   sortOrder: integer("sort_order").default(0),
-});
+}, (t) => [
+  index("quote_items_quote_id_idx").on(t.quoteId),
+]);
 
 // ============================================================
 // TEAM MEMBERS
@@ -215,6 +232,8 @@ export const teamMembers = sqliteTable("team_members", {
   isActive: integer("is_active", { mode: "boolean" }).default(true),
 }, (t) => [
   index("team_members_org_id_idx").on(t.orgId),
+  // Compound: email uniqueness check is always scoped to orgId (team/route.ts POST)
+  uniqueIndex("team_members_org_email_udx").on(t.orgId, t.email),
 ]);
 
 // ============================================================
@@ -247,6 +266,12 @@ export const jobs = sqliteTable("jobs", {
   index("jobs_client_id_idx").on(t.clientId),
   index("jobs_status_idx").on(t.status),
   index("jobs_scheduled_start_idx").on(t.scheduledStart),
+  // Compound: stats query filters orgId + status with inArray (scheduled, in_progress)
+  index("jobs_org_status_idx").on(t.orgId, t.status),
+  // Compound: client-scoped job list and convert-to-job duplicate check
+  index("jobs_org_client_idx").on(t.orgId, t.clientId),
+  // quote_id lookup for duplicate-conversion guard
+  index("jobs_quote_id_idx").on(t.quoteId),
 ]);
 
 // ============================================================
@@ -255,7 +280,7 @@ export const jobs = sqliteTable("jobs", {
 
 export const jobVisits = sqliteTable("job_visits", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  jobId: text("job_id").notNull().references(() => jobs.id),
+  jobId: text("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
   orgId: text("org_id").notNull().references(() => organizations.id),
   visitNumber: integer("visit_number").notNull(),
   scheduledDate: text("scheduled_date").notNull(),
@@ -271,6 +296,8 @@ export const jobVisits = sqliteTable("job_visits", {
 }, (t) => [
   index("job_visits_org_id_idx").on(t.orgId),
   index("job_visits_job_id_idx").on(t.jobId),
+  // Compound: schedule route filters orgId + scheduledDate range
+  index("job_visits_org_date_idx").on(t.orgId, t.scheduledDate),
 ]);
 
 // ============================================================
@@ -302,17 +329,22 @@ export const invoices = sqliteTable("invoices", {
   index("invoices_status_idx").on(t.status),
   index("invoices_job_id_idx").on(t.jobId),
   index("invoices_due_date_idx").on(t.dueDate),
+  // Compound: overdue invoice stats filter orgId + status; client list filters orgId + clientId
+  index("invoices_org_status_idx").on(t.orgId, t.status),
+  index("invoices_org_client_idx").on(t.orgId, t.clientId),
 ]);
 
 export const invoiceItems = sqliteTable("invoice_items", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  invoiceId: text("invoice_id").notNull().references(() => invoices.id),
+  invoiceId: text("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
   description: text("description").notNull(),
   quantity: real("quantity").default(1),
   unitPrice: real("unit_price").notNull(),
   total: real("total").notNull(),
   sortOrder: integer("sort_order").default(0),
-});
+}, (t) => [
+  index("invoice_items_invoice_id_idx").on(t.invoiceId),
+]);
 
 // ============================================================
 // PAYMENTS
@@ -330,6 +362,8 @@ export const payments = sqliteTable("payments", {
 }, (t) => [
   index("payments_org_id_idx").on(t.orgId),
   index("payments_invoice_id_idx").on(t.invoiceId),
+  // Stripe webhook idempotency guard: must look up by stripePaymentId quickly
+  uniqueIndex("payments_stripe_payment_id_udx").on(t.stripePaymentId),
 ]);
 
 // ============================================================
@@ -350,6 +384,11 @@ export const timeEntries = sqliteTable("time_entries", {
   index("time_entries_org_id_idx").on(t.orgId),
   index("time_entries_job_id_idx").on(t.jobId),
   index("time_entries_team_member_id_idx").on(t.teamMemberId),
+  // Open-entry check: orgId + teamMemberId + clockOut IS NULL (partial index not supported in SQLite,
+  // so compound index lets the WHERE clause use the index before filtering on NULL clockOut)
+  index("time_entries_org_member_clock_out_idx").on(t.orgId, t.teamMemberId, t.clockOut),
+  // Date-range filter on clockIn
+  index("time_entries_clock_in_idx").on(t.clockIn),
 ]);
 
 // ============================================================
@@ -400,6 +439,8 @@ export const serviceRequests = sqliteTable("service_requests", {
   index("service_requests_org_id_idx").on(t.orgId),
   index("service_requests_status_idx").on(t.status),
   index("service_requests_email_idx").on(t.email),
+  // Compound: stats query filters orgId + status = 'new'
+  index("service_requests_org_status_idx").on(t.orgId, t.status),
 ]);
 
 // ============================================================
@@ -476,6 +517,7 @@ export const reviewRequests = sqliteTable("review_requests", {
 }, (t) => [
   index("review_requests_org_id_idx").on(t.orgId),
   index("review_requests_job_id_idx").on(t.jobId),
+  index("review_requests_client_id_idx").on(t.clientId),
 ]);
 
 // ============================================================
@@ -496,4 +538,6 @@ export const auditLogs = sqliteTable("audit_logs", {
   index("audit_logs_entity_type_idx").on(t.entityType),
   index("audit_logs_entity_id_idx").on(t.entityId),
   index("audit_logs_created_at_idx").on(t.createdAt),
+  // Compound: entity history lookup always scopes to orgId + entityType + entityId
+  index("audit_logs_org_entity_idx").on(t.orgId, t.entityType, t.entityId),
 ]);
