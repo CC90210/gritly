@@ -10,6 +10,7 @@ export const organizations = sqliteTable("organizations", {
   createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
+  createdByEmail: text("created_by_email"),
   industry: text("industry").notNull().default("hvac"),
   plan: text("plan").notNull().default("starter"),
   onboardingCompleted: integer("onboarding_completed", { mode: "boolean" }).default(false),

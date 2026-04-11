@@ -112,6 +112,27 @@ def run(org_id: str | None = None) -> None:
                 except ValueError:
                     pass
 
+                # Dedup: skip if a reminder was already sent today for this invoice
+                reminder_subject = f"Overdue Invoice Reminder: {invoice_number}"
+                day_start_ts = int(today_dt.timestamp())
+                already_sent = db.execute(
+                    """
+                    SELECT id FROM communications
+                    WHERE org_id = ?
+                      AND client_id = ?
+                      AND subject = ?
+                      AND created_at >= ?
+                    LIMIT 1
+                    """,
+                    [current_org_id, client_id, reminder_subject, day_start_ts],
+                ).rows
+                if already_sent:
+                    print(
+                        f"  [SKIP] Invoice {invoice_number} — reminder already sent today"
+                    )
+                    org_outstanding -= balance_due  # don't double-count in totals
+                    continue
+
                 now_ts = int(datetime.now(timezone.utc).timestamp())
                 body = (
                     f"Automated reminder: Invoice {invoice_number} was due on {due_date}. "
@@ -133,7 +154,7 @@ def run(org_id: str | None = None) -> None:
                         client_id,
                         "email",
                         "outbound",
-                        f"Overdue Invoice Reminder: {invoice_number}",
+                        reminder_subject,
                         body,
                     ],
                 )

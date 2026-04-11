@@ -74,7 +74,7 @@ def _wrap(business_name: str, content: str, footer_note: str = "") -> str:
             <td style="background-color: #111827; border-radius: 8px 8px 0 0;
                        padding: 28px 36px; text-align: left;">
               <span style="color: #f97316; font-size: 20px; font-weight: 700;
-                           letter-spacing: -0.02em;">{business_name}</span>
+                           letter-spacing: -0.02em;">{_esc(business_name)}</span>
             </td>
           </tr>
 
@@ -158,7 +158,7 @@ def quote_template(
         unit_price = item.get("unit_price", 0)
         line_total = item.get("total", qty * unit_price)
         items_html += _line_item_row(
-            f"{desc} &times; {qty}",
+            f"{_esc(str(desc))} &times; {_esc(str(qty))}",
             f"${line_total:,.2f}",
         )
 
@@ -175,7 +175,7 @@ def quote_template(
       Your Quote is Ready
     </h2>
     <p style="margin: 0 0 24px; font-size: 15px; color: #6b7280;">
-      Hi {client_name} — we've prepared a quote for you. Review the details
+      Hi {_esc(client_name)} — we've prepared a quote for you. Review the details
       below and approve when you're ready.
     </p>
 
@@ -261,7 +261,7 @@ def quote_approved_template(
           </td>
           <td style="font-size: 13px; color: #111827; font-weight: 600;
                      text-align: right; padding-bottom: 6px;">
-            {client_name}
+            {_esc(client_name)}
           </td>
         </tr>
         <tr>
@@ -317,7 +317,7 @@ def invoice_template(
         qty = item.get("quantity", 1)
         line_total = item.get("total", 0)
         items_html += _line_item_row(
-            f"{desc} &times; {qty}",
+            f"{_esc(str(desc))} &times; {_esc(str(qty))}",
             f"${line_total:,.2f}",
         )
 
@@ -334,7 +334,7 @@ def invoice_template(
       Invoice {invoice_number}
     </h2>
     <p style="margin: 0 0 24px; font-size: 15px; color: #6b7280;">
-      Hi {client_name} — thank you for choosing {business_name}.
+      Hi {_esc(client_name)} — thank you for choosing {_esc(business_name)}.
       Your invoice is ready below.
     </p>
 
@@ -394,7 +394,7 @@ def payment_received_template(
       Payment Received {_badge("Paid", "#16a34a")}
     </h2>
     <p style="margin: 0 0 24px; font-size: 15px; color: #6b7280;">
-      Hi {client_name} — we've received your payment. Thank you!
+      Hi {_esc(client_name)} — we've received your payment. Thank you!
     </p>
 
     <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0;
@@ -458,7 +458,7 @@ def job_scheduled_template(
           <td style="font-size: 13px; color: #6b7280; padding-bottom: 8px;
                      vertical-align: top;">Service Address</td>
           <td style="font-size: 13px; color: #111827; font-weight: 500;
-                     text-align: right; padding-bottom: 8px;">{address}</td>
+                     text-align: right; padding-bottom: 8px;">{_esc(address)}</td>
         </tr>"""
 
     tech_row = ""
@@ -470,7 +470,7 @@ def job_scheduled_template(
           </td>
           <td style="font-size: 13px; color: #111827; font-weight: 500;
                      text-align: right; padding-bottom: 8px;">
-            {technician}
+            {_esc(technician)}
           </td>
         </tr>"""
 
@@ -480,16 +480,16 @@ def job_scheduled_template(
       Service Appointment Confirmed
     </h2>
     <p style="margin: 0 0 24px; font-size: 15px; color: #6b7280;">
-      Hi {client_name} — your appointment is confirmed. Here are the details:
+      Hi {_esc(client_name)} — your appointment is confirmed. Here are the details:
     </p>
 
     <div style="background-color: #f9fafb; border-left: 4px solid #f97316;
                 border-radius: 0 8px 8px 0; padding: 20px 24px;
                 margin-bottom: 24px;">
       <p style="margin: 0 0 6px; font-size: 16px; font-weight: 700;
-                color: #111827;">{job_title}</p>
+                color: #111827;">{_esc(job_title)}</p>
       <p style="margin: 0; font-size: 13px; color: #9ca3af;">
-        Reference: {job_number}
+        Reference: {_esc(job_number)}
       </p>
     </div>
 
@@ -547,7 +547,7 @@ def job_completed_template(
                     text-transform: uppercase; letter-spacing: 0.05em;
                     font-weight: 600;">Next Steps</p>
           <p style="margin: 0; font-size: 14px; color: #374151;">
-            {next_steps}
+            {_esc(next_steps)}
           </p>
         </div>"""
 
@@ -557,16 +557,16 @@ def job_completed_template(
       Work Completed {_badge("Done", "#16a34a")}
     </h2>
     <p style="margin: 0 0 24px; font-size: 15px; color: #6b7280;">
-      Hi {client_name} — the job has been completed. Thank you for trusting
-      {business_name} with your service.
+      Hi {_esc(client_name)} — the job has been completed. Thank you for trusting
+      {_esc(business_name)} with your service.
     </p>
 
     <div style="background-color: #f9fafb; border-radius: 8px;
                 padding: 20px 24px; margin-bottom: 24px;">
       <p style="margin: 0 0 4px; font-size: 14px; font-weight: 600;
-                color: #111827;">{job_title}</p>
+                color: #111827;">{_esc(job_title)}</p>
       <p style="margin: 0; font-size: 13px; color: #9ca3af;">
-        {job_number} &middot; Completed {completed_at}
+        {_esc(job_number)} &middot; Completed {_esc(completed_at)}
       </p>
     </div>
 
@@ -597,7 +597,7 @@ def review_request_template(
       How Did We Do?
     </h2>
     <p style="margin: 0 0 24px; font-size: 15px; color: #6b7280;">
-      Hi {client_name} — we recently completed <strong>{job_title}</strong>
+      Hi {_esc(client_name)} — we recently completed <strong>{_esc(job_title)}</strong>
       for you. Your feedback means everything to us and helps other homeowners
       find trusted service providers in the area.
     </p>
@@ -649,7 +649,7 @@ def booking_confirmation_template(
           <td style="font-size: 13px; color: #6b7280; padding-bottom: 8px;
                      vertical-align: top;">Service Address</td>
           <td style="font-size: 13px; color: #111827; font-weight: 500;
-                     text-align: right; padding-bottom: 8px;">{address}</td>
+                     text-align: right; padding-bottom: 8px;">{_esc(address)}</td>
         </tr>"""
 
     content = f"""
@@ -658,7 +658,7 @@ def booking_confirmation_template(
       Request Received
     </h2>
     <p style="margin: 0 0 24px; font-size: 15px; color: #6b7280;">
-      Hi {client_name} — thanks for reaching out to {business_name}.
+      Hi {_esc(client_name)} — thanks for reaching out to {_esc(business_name)}.
       We've received your service request and will follow up shortly to
       confirm your appointment.
     </p>
@@ -672,7 +672,7 @@ def booking_confirmation_template(
           </td>
           <td style="font-size: 13px; color: #111827; font-weight: 600;
                      text-align: right; padding-bottom: 8px;">
-            {service_type}
+            {_esc(service_type)}
           </td>
         </tr>
         <tr>
@@ -681,7 +681,7 @@ def booking_confirmation_template(
           </td>
           <td style="font-size: 13px; color: #111827; font-weight: 500;
                      text-align: right; padding-bottom: 8px;">
-            {schedule_str}
+            {_esc(schedule_str)}
           </td>
         </tr>
         {address_html}
@@ -721,7 +721,7 @@ def quote_followup_template(
       Following Up on Your Quote
     </h2>
     <p style="margin: 0 0 24px; font-size: 15px; color: #6b7280;">
-      Hi {client_name} — we sent you a quote {days_since_sent} day{'s' if days_since_sent != 1 else ''} ago
+      Hi {_esc(client_name)} — we sent you a quote {days_since_sent} day{'s' if days_since_sent != 1 else ''} ago
       and wanted to check in. We'd love to get started on your project whenever
       you're ready.
     </p>
@@ -790,8 +790,8 @@ def invoice_overdue_template(
       Invoice Overdue {_badge(urgency_label, urgency_color)}
     </h2>
     <p style="margin: 0 0 24px; font-size: 15px; color: #6b7280;">
-      Hi {client_name} — invoice {invoice_number} was due on
-      <strong>{due_date}</strong> and still shows a balance.
+      Hi {_esc(client_name)} — invoice {_esc(invoice_number)} was due on
+      <strong>{_esc(due_date)}</strong> and still shows a balance.
       Please arrange payment at your earliest convenience to avoid
       any service interruptions.
     </p>
@@ -805,7 +805,7 @@ def invoice_overdue_template(
           </td>
           <td style="font-size: 13px; color: #111827; font-weight: 600;
                      text-align: right; padding-bottom: 8px;">
-            {invoice_number}
+            {_esc(invoice_number)}
           </td>
         </tr>
         <tr>
@@ -814,7 +814,7 @@ def invoice_overdue_template(
           </td>
           <td style="font-size: 13px; color: #dc2626; font-weight: 600;
                      text-align: right; padding-bottom: 8px;">
-            {due_date}
+            {_esc(due_date)}
           </td>
         </tr>
         <tr>

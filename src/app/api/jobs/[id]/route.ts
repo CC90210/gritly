@@ -72,6 +72,14 @@ export async function PATCH(
     );
   }
 
+  const [existingJob] = await db
+    .select({ id: jobs.id, status: jobs.status })
+    .from(jobs)
+    .where(and(eq(jobs.id, id), eq(jobs.orgId, orgId)))
+    .limit(1);
+
+  if (!existingJob) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
   const updateData: Record<string, unknown> = { updatedAt: new Date() };
   if (body.status !== undefined) updateData.status = body.status;
   if (body.title !== undefined) updateData.title = body.title;
@@ -84,6 +92,9 @@ export async function PATCH(
   if (body.scheduledStart) updateData.scheduledStart = new Date(body.scheduledStart);
   if (body.scheduledEnd) updateData.scheduledEnd = new Date(body.scheduledEnd);
   if (body.completedAt) updateData.completedAt = new Date(body.completedAt);
+  if (body.status === "completed" && existingJob.status !== "completed" && body.completedAt === undefined) {
+    updateData.completedAt = new Date();
+  }
 
   const [updated] = await db
     .update(jobs)

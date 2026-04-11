@@ -6,6 +6,8 @@ import { requireRole, isAuthorized } from "@/lib/auth/require-role";
 import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { parseBody } from "@/lib/utils/parse-body";
+import { sendEmail } from "@/lib/email";
+import { bookingConfirmationTemplate } from "@/lib/email/templates";
 
 const sanitize = (s: string, max = 500) => s.trim().slice(0, max);
 
@@ -62,7 +64,7 @@ export async function POST(req: NextRequest) {
   }
 
   const [org] = await db
-    .select({ id: organizations.id })
+    .select({ id: organizations.id, name: organizations.name })
     .from(organizations)
     .where(eq(organizations.id, body.orgId))
     .limit(1);
@@ -90,5 +92,25 @@ export async function POST(req: NextRequest) {
     })
     .returning();
 
-  return NextResponse.json(row, { status: 201 });
+  let confirmationEmailSent = false;
+  try {
+    const emailResult = await sendEmail({
+      to: row.email,
+      subject: `We received your service request - ${org.name}`,
+      html: bookingConfirmationTemplate({
+        businessName: org.name,
+        clientName: `${row.firstName} ${row.lastName}`.trim(),
+        serviceType: row.serviceType,
+        preferredDate: row.preferredDate ?? undefined,
+        preferredTime: row.preferredTime ?? undefined,
+        referenceNumber: row.id,
+        address: row.address ?? undefined,
+      }),
+    });
+    confirmationEmailSent = emailResult.success;
+  } catch (error) {
+    console.error("[requests] Failed to send confirmation email:", error);
+  }
+
+  return NextResponse.json({ ...row, confirmationEmailSent }, { status: 201 });
 }

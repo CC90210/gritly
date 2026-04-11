@@ -15,8 +15,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { businessName, name, email, password } = body;
+    const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
 
-    if (!businessName || !email || !password) {
+    if (!businessName || !normalizedEmail || !password) {
       return NextResponse.json(
         { error: "Business name, email, and password are required." },
         { status: 400 }
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const existing = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
+    const existing = await db.select({ id: users.id }).from(users).where(eq(users.email, normalizedEmail)).limit(1);
     if (existing.length > 0) {
       return NextResponse.json(
         { error: "An account with this email already exists." },
@@ -45,10 +46,13 @@ export async function POST(request: NextRequest) {
     }
 
     const orgId = crypto.randomUUID();
+    // If better-auth signup fails after this insert, a background cleanup job should
+    // remove organizations older than 5 minutes that still have no linked owner user.
     await db.insert(organizations).values({
       id: orgId,
       name: businessName,
       slug,
+      createdByEmail: normalizedEmail,
       industry: "hvac",
       plan: "starter",
       onboardingCompleted: false,

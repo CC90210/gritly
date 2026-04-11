@@ -69,6 +69,14 @@ export async function PATCH(
     );
   }
 
+  const [existingQuote] = await db
+    .select({ id: quotes.id, status: quotes.status })
+    .from(quotes)
+    .where(and(eq(quotes.id, id), eq(quotes.orgId, orgId)))
+    .limit(1);
+
+  if (!existingQuote) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
   const updateData: Record<string, unknown> = { updatedAt: new Date() };
   if (body.status !== undefined) updateData.status = body.status;
   if (body.notes !== undefined) updateData.notes = body.notes;
@@ -78,6 +86,12 @@ export async function PATCH(
   if (body.propertyId !== undefined) updateData.propertyId = body.propertyId;
   if (body.approvedAt) updateData.approvedAt = new Date(body.approvedAt);
   if (body.sentAt) updateData.sentAt = new Date(body.sentAt);
+  if (body.status === "approved" && existingQuote.status !== "approved" && body.approvedAt === undefined) {
+    updateData.approvedAt = new Date();
+  }
+  if (body.status === "sent" && existingQuote.status !== "sent" && body.sentAt === undefined) {
+    updateData.sentAt = new Date();
+  }
 
   const [updated] = await db
     .update(quotes)

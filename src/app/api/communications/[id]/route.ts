@@ -33,9 +33,9 @@ export async function DELETE(
     orgId,
     userId,
     action: "delete",
-    entityType: "client",
-    entityId: existing.clientId,
-    metadata: { communicationId: id },
+    entityType: "communication",
+    entityId: id,
+    metadata: { clientId: existing.clientId },
   });
 
   return new NextResponse(null, { status: 204 });

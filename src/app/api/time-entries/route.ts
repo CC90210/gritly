@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { timeEntries, teamMembers, jobs } from "@/lib/db/schema";
-import { eq, and, gte, lte, desc } from "drizzle-orm";
+import { eq, and, gte, lte, desc, isNull } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
 import { logAudit } from "@/lib/audit";
 import { parseBody } from "@/lib/utils/parse-body";
@@ -80,6 +80,28 @@ export async function POST(req: NextRequest) {
     .limit(1);
   if (!member) {
     return NextResponse.json({ error: "Invalid teamMemberId" }, { status: 422 });
+  }
+
+  const [existingOpenEntry] = await db
+    .select({ id: timeEntries.id, clockIn: timeEntries.clockIn })
+    .from(timeEntries)
+    .where(
+      and(
+        eq(timeEntries.orgId, orgId),
+        eq(timeEntries.teamMemberId, body.teamMemberId),
+        isNull(timeEntries.clockOut)
+      )
+    )
+    .limit(1);
+
+  if (existingOpenEntry) {
+    return NextResponse.json(
+      {
+        error: "This team member already has an open time entry. Close it before starting a new one.",
+        existingEntryId: existingOpenEntry.id,
+      },
+      { status: 409 }
+    );
   }
 
   const clockIn = new Date(body.clockIn);

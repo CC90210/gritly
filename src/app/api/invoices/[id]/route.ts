@@ -182,6 +182,12 @@ export async function PATCH(
   if (rest.dueDate !== undefined) updateData.dueDate = rest.dueDate;
   if (rest.sentAt) updateData.sentAt = new Date(rest.sentAt);
   if (rest.paidAt) updateData.paidAt = new Date(rest.paidAt);
+  if (rest.status === "sent" && invoice.status !== "sent" && rest.sentAt === undefined) {
+    updateData.sentAt = new Date();
+  }
+  if (rest.status === "paid" && invoice.status !== "paid" && rest.paidAt === undefined) {
+    updateData.paidAt = new Date();
+  }
 
   if (Object.keys(rest).length > 0) {
     await db

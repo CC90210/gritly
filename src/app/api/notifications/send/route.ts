@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
-import { sendEmail, getOwnerCc } from "@/lib/email";
+import { sendEmail, getOwnerCc, isEmailConfigured } from "@/lib/email";
 import {
   quoteTemplate,
   invoiceTemplate,
@@ -328,6 +328,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { error: "type, recipientEmail, and data are required" },
       { status: 400 },
     );
+  }
+
+  if (!isEmailConfigured()) {
+    return NextResponse.json({ error: "Email service is not configured" }, { status: 503 });
   }
 
   try {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { clients, quotes, jobs, invoices } from "@/lib/db/schema";
+import { clients, quotes, jobs, invoices, properties, communications } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
 import { rateLimit } from "@/lib/middleware/rate-limit";
@@ -128,6 +128,30 @@ export async function DELETE(
   if (invoiceRef) {
     return NextResponse.json(
       { error: "Cannot delete client with existing invoices. Delete or reassign them first." },
+      { status: 422 }
+    );
+  }
+
+  const [propertyRef] = await db
+    .select({ id: properties.id })
+    .from(properties)
+    .where(and(eq(properties.clientId, id), eq(properties.orgId, orgId)))
+    .limit(1);
+  if (propertyRef) {
+    return NextResponse.json(
+      { error: "Cannot delete client with existing properties. Delete or reassign them first." },
+      { status: 422 }
+    );
+  }
+
+  const [communicationRef] = await db
+    .select({ id: communications.id })
+    .from(communications)
+    .where(and(eq(communications.clientId, id), eq(communications.orgId, orgId)))
+    .limit(1);
+  if (communicationRef) {
+    return NextResponse.json(
+      { error: "Cannot delete client with existing communications. Delete or reassign them first." },
       { status: 422 }
     );
   }

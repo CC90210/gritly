@@ -100,9 +100,9 @@ export async function POST(req: NextRequest) {
     orgId,
     userId,
     action: "create",
-    entityType: "client",
-    entityId: body.clientId,
-    metadata: { communicationId: row.id, type: body.type ?? "note" },
+    entityType: "communication",
+    entityId: row.id,
+    metadata: { clientId: body.clientId, type: body.type ?? "note" },
   });
 
   return NextResponse.json(row, { status: 201 });

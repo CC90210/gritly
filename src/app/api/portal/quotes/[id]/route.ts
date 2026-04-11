@@ -82,8 +82,8 @@ export async function PATCH(
   }
 
   const updateValues: Record<string, unknown> = { status: body.status };
-  if (body.status === "approved" && body.approvedAt) {
-    updateValues.approvedAt = body.approvedAt;
+  if (body.status === "approved") {
+    updateValues.approvedAt = body.approvedAt ? new Date(body.approvedAt) : new Date();
   }
 
   const [updated] = await db

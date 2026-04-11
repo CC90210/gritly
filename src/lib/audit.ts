@@ -4,6 +4,7 @@ import { auditLogs } from "@/lib/db/schema";
 export type AuditAction = "create" | "update" | "delete";
 export type AuditEntityType =
   | "client"
+  | "communication"
   | "quote"
   | "job"
   | "invoice"

@@ -16,14 +16,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "orgId required" }, { status: 400 });
   }
 
+  const sessionEmail = session.user.email?.trim().toLowerCase();
   const [org] = await db
-    .select({ id: organizations.id })
+    .select({ createdByEmail: organizations.createdByEmail })
     .from(organizations)
     .where(eq(organizations.id, orgId))
     .limit(1);
 
   if (!org) {
     return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+  }
+
+  if (!sessionEmail || org.createdByEmail !== sessionEmail) {
+    return NextResponse.json(
+      { error: "Not authorized to link to this organization" },
+      { status: 403 }
+    );
   }
 
   await db

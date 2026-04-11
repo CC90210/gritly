@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { teamMembers } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 import { requireRole, isAuthorized } from "@/lib/auth/require-role";
 import { rateLimit } from "@/lib/middleware/rate-limit";
 import { logAudit } from "@/lib/audit";
@@ -51,13 +51,27 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const normalizedEmail = body.email.trim().toLowerCase();
+  const [existingMember] = await db
+    .select({ id: teamMembers.id })
+    .from(teamMembers)
+    .where(and(eq(teamMembers.orgId, orgId), sql`lower(${teamMembers.email}) = ${normalizedEmail}`))
+    .limit(1);
+
+  if (existingMember) {
+    return NextResponse.json(
+      { error: "A team member with this email already exists in this organization." },
+      { status: 409 }
+    );
+  }
+
   const [row] = await db
     .insert(teamMembers)
     .values({
       orgId,
       firstName: body.firstName,
       lastName: body.lastName,
-      email: body.email,
+      email: normalizedEmail,
       phone: body.phone ?? null,
       role: body.role ?? "technician",
       hourlyRate: body.hourlyRate ?? null,

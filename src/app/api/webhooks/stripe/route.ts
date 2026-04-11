@@ -57,13 +57,26 @@ export async function POST(req: NextRequest) {
 
     // amount_total is in cents
     const amountPaid = (session.amount_total ?? 0) / 100;
+    const stripePaymentId = typeof session.payment_intent === "string" ? session.payment_intent : null;
+
+    if (stripePaymentId) {
+      const existingPayment = await db
+        .select({ id: payments.id })
+        .from(payments)
+        .where(eq(payments.stripePaymentId, stripePaymentId))
+        .limit(1);
+
+      if (existingPayment.length > 0) {
+        return NextResponse.json({ received: true, duplicate: true }, { status: 200 });
+      }
+    }
 
     await db.insert(payments).values({
       orgId,
       invoiceId,
       amount: amountPaid,
       method: "credit_card",
-      stripePaymentId: session.payment_intent as string ?? null,
+      stripePaymentId,
       notes: `Stripe checkout session ${session.id}`,
     });
 
